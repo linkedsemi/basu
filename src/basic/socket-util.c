@@ -5,6 +5,10 @@
 #include "socket-util.h"
 #include "strv.h"
 
+#ifdef __ZEPHYR__
+#include "basu_zephyr_compat.h"
+#endif
+
 #ifdef __FreeBSD__
 #include <sys/ucred.h>
 #include <sys/un.h>

@@ -4,6 +4,9 @@
 
 #include "sd-bus.h"
 
+/* Forward declaration for main function renamed by build system */
+int basu_busctl_entry(int argc, char *argv[]);
+
 #include "alloc-util.h"
 #include "bus-dump.h"
 #include "bus-internal.h"

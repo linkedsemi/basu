@@ -129,6 +129,14 @@ static int bus_socket_write_null_byte(sd_bus *b) {
 #elif defined(__FreeBSD__)
 #define SOCKET_CRED_OPTION SCM_CREDS
         struct cmsgcred creds = { 0 };
+#elif defined(__ZEPHYR__)
+/* Zephyr doesn't support socket credentials, use dummy values */
+        struct {
+                pid_t pid;
+                uid_t uid;
+                gid_t gid;
+        } creds = { .pid = 0, .uid = 0, .gid = 0 };
+#define SOCKET_CRED_OPTION SO_PASSCRED
 #else
 #error auth not implemented for this OS
 #endif

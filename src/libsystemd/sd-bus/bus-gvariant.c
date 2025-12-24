@@ -4,6 +4,7 @@
 #include <sys/endian.h>
 #endif
 
+#include <byteswap.h>
 #include <errno.h>
 #include <string.h>
 

@@ -1,0 +1,3 @@
+name: basu
+build:
+  cmake: zephyr

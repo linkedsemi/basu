@@ -34,16 +34,28 @@ int bus_error_set_errnofv(sd_bus_error *e, int error, const char *format, va_lis
  * warn for the unknown attribute, so just disable -Wattributes.
  */
 
+#ifdef __ZEPHYR__
+#define BUS_ERROR_MAP_ELF_REGISTER                                      \
+        _Pragma("GCC diagnostic ignored \"-Wattributes\"")              \
+        __attribute__ ((__used__))                                      \
+        __attribute__ ((aligned(8)))
+#else
 #define BUS_ERROR_MAP_ELF_REGISTER                                      \
         _Pragma("GCC diagnostic ignored \"-Wattributes\"")              \
         __attribute__ ((__section__("BUS_ERROR_MAP")))                  \
         __attribute__ ((__used__))                                      \
         __attribute__ ((retain))                                        \
         __attribute__ ((aligned(8)))
+#endif
 
+#ifdef __ZEPHYR__
+#define BUS_ERROR_MAP_ELF_USE(errors)                                   \
+        extern const sd_bus_error_map errors[];
+#else
 #define BUS_ERROR_MAP_ELF_USE(errors)                                   \
         extern const sd_bus_error_map errors[];                         \
         __attribute__ ((used)) static const sd_bus_error_map * const CONCATENATE(errors ## _copy_, __COUNTER__) = errors;
+#endif
 
 /* We use something exotic as end marker, to ensure people build the
  * maps using the macsd-ros. */

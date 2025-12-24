@@ -1261,7 +1261,7 @@ static int json_format(FILE *f, JsonVariant *v, unsigned flags, const char *pref
                                 break;
 
                         default:
-                                if (*q >= 0 && *q < ' ')
+                                if ((signed char)*q >= 0 && (signed char)*q < ' ')
                                         fprintf(f, "\\u%04x", *q);
                                 else
                                         fputc(*q, f);

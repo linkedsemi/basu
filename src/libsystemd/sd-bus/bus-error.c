@@ -15,8 +15,16 @@
 #include "string-util.h"
 #include "util.h"
 
-static char *_strerror_r(int errnum, char *buf, size_t buflen) {
-#ifdef __GLIBC__
+static char *_basu_strerror_r(int errnum, char *buf, size_t buflen) {
+#ifdef __ZEPHYR__
+        /* Use strerror for Zephyr to avoid _strerror_r conflicts */
+        char *msg = strerror(errnum);
+        if (msg && strlen(msg) < buflen) {
+                strcpy(buf, msg);
+                return buf;
+        }
+        return NULL;
+#elif defined(__GLIBC__)
         return strerror_r(errnum, buf, buflen);
 #else
         int res = strerror_r(errnum, buf, buflen);
@@ -71,8 +79,10 @@ BUS_ERROR_MAP_ELF_REGISTER const sd_bus_error_map bus_standard_errors[] = {
 };
 
 /* GCC maps this magically to the beginning and end of the BUS_ERROR_MAP section */
+#ifndef __ZEPHYR__
 extern const sd_bus_error_map __start_BUS_ERROR_MAP[];
 extern const sd_bus_error_map __stop_BUS_ERROR_MAP[];
+#endif
 
 /* Additional maps registered with sd_bus_error_add_map() are in this
  * NULL terminated array */
@@ -106,6 +116,25 @@ static int bus_error_name_to_errno(const char *name) {
                                         return m->code;
                         }
 
+#ifdef __ZEPHYR__
+        /* For Zephyr, manually check the standard error maps */
+        extern const sd_bus_error_map bus_standard_errors[];
+        extern const sd_bus_error_map bus_common_errors[];
+        
+        m = bus_standard_errors;
+        while (m->code != BUS_ERROR_MAP_END_MARKER) {
+                if (streq(m->name, name))
+                        return m->code;
+                m++;
+        }
+        
+        m = bus_common_errors;
+        while (m->code != BUS_ERROR_MAP_END_MARKER) {
+                if (streq(m->name, name))
+                        return m->code;
+                m++;
+        }
+#else
         m = __start_BUS_ERROR_MAP;
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
         while (m < __stop_BUS_ERROR_MAP) {
@@ -125,6 +154,7 @@ static int bus_error_name_to_errno(const char *name) {
 
                 m++;
         }
+#endif
 #endif
 
         return EIO;
@@ -401,7 +431,7 @@ static void bus_error_strerror(sd_bus_error *e, int error) {
                         return;
 
                 errno = 0;
-                x = _strerror_r(error, m, k);
+                x = _basu_strerror_r(error, m, k);
                 if (errno == ERANGE || strlen(x) >= k - 1) {
                         free(m);
                         k *= 2;

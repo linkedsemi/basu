@@ -13,9 +13,17 @@ typedef uint64_t nsec_t;
 
 #define USEC_INFINITY ((usec_t) -1)
 
+#ifndef USEC_PER_SEC
 #define USEC_PER_SEC  ((usec_t) 1000000ULL)
+#endif
+
+#ifndef USEC_PER_MSEC
 #define USEC_PER_MSEC ((usec_t) 1000ULL)
+#endif
+
+#ifndef NSEC_PER_USEC
 #define NSEC_PER_USEC ((nsec_t) 1000ULL)
+#endif
 
 #define USEC_PER_MINUTE ((usec_t) (60ULL*USEC_PER_SEC))
 #define USEC_PER_HOUR ((usec_t) (60ULL*USEC_PER_MINUTE))

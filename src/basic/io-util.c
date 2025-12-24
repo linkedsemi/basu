@@ -67,6 +67,7 @@ int loop_read_exact(int fd, void *buf, size_t nbytes, bool do_poll) {
         return 0;
 }
 
+#ifdef __ZEPHYR__
 int fd_wait_for_event(int fd, int event, usec_t t) {
 
         struct pollfd pollfd = {
@@ -74,7 +75,32 @@ int fd_wait_for_event(int fd, int event, usec_t t) {
                 .events = event,
         };
 
-        struct timespec ts;
+        int r;
+
+        if (t == USEC_INFINITY) {
+                r = poll(&pollfd, 1, -1);
+        } else {
+                struct timeval tv;
+                tv.tv_sec = t / USEC_PER_SEC;
+                tv.tv_usec = t % USEC_PER_SEC;
+                r = poll(&pollfd, 1, tv.tv_sec * 1000 + tv.tv_usec / 1000);
+        }
+        
+        if (r < 0)
+                return -errno;
+        if (r == 0)
+                return 0;
+
+        return pollfd.revents;
+}
+#else
+int fd_wait_for_event(int fd, int event, usec_t t) {
+
+        struct pollfd pollfd = {
+                .fd = fd,
+                .events = event,
+        };
+
         int r;
 
         r = ppoll(&pollfd, 1, t == USEC_INFINITY ? NULL : timespec_store(&ts, t), NULL);
@@ -85,3 +111,4 @@ int fd_wait_for_event(int fd, int event, usec_t t) {
 
         return pollfd.revents;
 }
+#endif

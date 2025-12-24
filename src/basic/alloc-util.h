@@ -21,7 +21,7 @@
                 (t*) alloca(sizeof(t)*(n));                     \
         })
 
-#define newdup(t, p, n) ((t*) memdup_multiply(p, sizeof(t), (n)))
+#define newdup(t, p, n) ((t*) memdup_multiply(p, (n), sizeof(t)))
 
 #define malloc0(n) (calloc(1, (n)))
 
@@ -55,7 +55,7 @@ static inline bool size_multiply_overflow(size_t size, size_t need) {
         return _unlikely_(need != 0 && size > (SIZE_MAX / need));
 }
 
-_malloc_  _alloc_(1, 2) static inline void *malloc_multiply(size_t size, size_t need) {
+_malloc_  _alloc_(2, 1) static inline void *malloc_multiply(size_t size, size_t need) {
         if (size_multiply_overflow(size, need))
                 return NULL;
 

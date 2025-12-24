@@ -165,15 +165,12 @@ static inline size_t ALIGN_TO(size_t l, size_t ali) {
  * computation should be possible in the given type. Therefore, we use
  * [x / y + !!(x % y)]. Note that on "Real CPUs" a division returns both the
  * quotient and the remainder, so both should be equally fast. */
-// 在DIV_ROUND_UP宏定义前添加保护条件
-#ifndef DIV_ROUND_UP
 #define DIV_ROUND_UP(_x, _y)                                            \
         ({                                                              \
                 const typeof(_x) __x = (_x);                            \
                 const typeof(_y) __y = (_y);                            \
-                (__x + __y - 1) / __y;                                  \
+                (__x / __y + !!(__x % __y));                            \
         })
-#endif
 
 #ifdef __COVERITY__
 
@@ -233,7 +230,9 @@ static inline int __coverity_check__(int condition) {
         } while (false)
 
 #define assert_cc(expr)                                                 \
-        _Static_assert(expr, #expr)
+        struct CONCATENATE(_assert_struct_, __COUNTER__) {              \
+                char x[(expr) ? 0 : -1];                                \
+        };
 
 #define assert_return(expr, r)                                          \
         do {                                                            \

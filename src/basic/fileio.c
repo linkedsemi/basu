@@ -54,7 +54,7 @@ int read_full_stream(FILE *f, char **contents, size_t *size) {
                 if (S_ISREG(st.st_mode)) {
 
                         /* Safety check */
-                        if (st.st_size > READ_FULL_BYTES_MAX)
+                        if ((uint64_t)st.st_size > READ_FULL_BYTES_MAX)
                                 return -E2BIG;
 
                         /* Start with the right file size, but be prepared for files from /proc which generally report a file

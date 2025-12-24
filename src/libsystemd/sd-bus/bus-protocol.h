@@ -3,6 +3,8 @@
 
 #ifdef __FreeBSD__
 #include <machine/endian.h>
+#elif defined(__ZEPHYR__)
+#include <zephyr/sys/byteorder.h>
 #else
 #include <endian.h>
 #endif
