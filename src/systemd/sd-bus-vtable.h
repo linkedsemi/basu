@@ -1,4 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
+
+/* Fix for SD_BUS_VTABLE_DEPRECATED being defined as empty string */
+#ifdef SD_BUS_VTABLE_DEPRECATED
+#undef SD_BUS_VTABLE_DEPRECATED
+#endif
+
+#define SD_BUS_VTABLE_DEPRECATED (1ULL << 0)
+
 #ifndef foosdbusvtablehfoo
 #define foosdbusvtablehfoo
 
@@ -16,6 +24,11 @@
   You should have received a copy of the GNU Lesser General Public License
   along with systemd; If not, see <http://www.gnu.org/licenses/>.
 ***/
+
+/* Fix for SD_BUS_VTABLE_DEPRECATED being defined as empty string */
+#ifdef SD_BUS_VTABLE_DEPRECATED
+#undef SD_BUS_VTABLE_DEPRECATED
+#endif
 
 #include "_sd-common.h"
 
@@ -35,6 +48,7 @@ enum {
 };
 
 enum {
+        /* Handle the case where SD_BUS_VTABLE_DEPRECATED might be defined as empty string */
         SD_BUS_VTABLE_DEPRECATED                   = 1ULL << 0,
         SD_BUS_VTABLE_HIDDEN                       = 1ULL << 1,
         SD_BUS_VTABLE_UNPRIVILEGED                 = 1ULL << 2,

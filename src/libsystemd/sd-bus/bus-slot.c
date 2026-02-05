@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
-#include "sd-bus.h"
+#include "../../systemd/sd-bus.h"
 
 #include "alloc-util.h"
 #include "bus-control.h"

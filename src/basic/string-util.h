@@ -12,6 +12,10 @@
 
 #include "macro.h"
 
+#ifdef __ZEPHYR__
+#include "basu_zephyr_compat.h"
+#endif
+
 /* What is interpreted as whitespace? */
 #define WHITESPACE        " \t\n\r"
 #define NEWLINE           "\n\r"

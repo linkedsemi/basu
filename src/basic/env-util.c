@@ -1,8 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
-#include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+
+#ifdef __ZEPHYR__
+#include <basu_zephyr_compat.h>
+#endif
 
 #include "env-util.h"
 #include "parse-util.h"

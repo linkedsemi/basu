@@ -20,6 +20,10 @@
 #include "missing.h"
 #include "time-util.h"
 
+#ifdef __ZEPHYR__
+#include "basu_zephyr_compat.h"
+#endif
+
 #ifndef __COMPAR_FN_T
 #define __COMPAR_FN_T
 typedef int (*__compar_fn_t)(const void *, const void *);

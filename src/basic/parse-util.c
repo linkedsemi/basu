@@ -222,12 +222,9 @@ int safe_atod(const char *s, double *ret_d) {
         assert(s);
         assert(ret_d);
 
-        loc = newlocale(LC_NUMERIC_MASK, "C", (locale_t) 0);
-        if (loc == (locale_t) 0)
-                return -errno;
-
+        /* Use standard strtod instead of locale-specific strtod_l */
         errno = 0;
-        d = strtod_l(s, &x, loc);
+        d = strtod(s, &x);
         if (errno > 0)
                 return -errno;
         if (!x || x == s || *x != 0)

@@ -2,9 +2,14 @@
 #pragma once
 
 #include <pthread.h>
+#ifdef __ZEPHYR__
+#include <zephyr/net/socket.h>
+#else
 #include <sys/socket.h>
+#endif
 
-#include "sd-bus.h"
+/* Use relative path to ensure we find the correct sd-bus.h file */
+#include "../../systemd/sd-bus.h"
 
 #include "bus-error.h"
 #include "bus-kernel.h"

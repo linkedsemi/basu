@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
 #include <string.h>
+#ifdef __ZEPHYR__
+#include <zephyr/posix/posix_types.h>
+#endif
 
 #include "hash-funcs.h"
 #include "path-util.h"

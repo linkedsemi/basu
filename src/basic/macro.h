@@ -94,11 +94,7 @@ static inline size_t ALIGN_TO(size_t l, size_t ali) {
 #  define VOID_0 ((void*)0)
 #endif
 
-#define ELEMENTSOF(x)                                                   \
-        (__builtin_choose_expr(                                         \
-                !__builtin_types_compatible_p(typeof(x), typeof(&*(x))), \
-                sizeof(x)/sizeof((x)[0]),                               \
-                VOID_0))
+#define ELEMENTSOF(x) (sizeof(x)/sizeof((x)[0]))
 
 /*
  * STRLEN - return the length of a string literal, minus the trailing NUL byte.
@@ -121,58 +117,32 @@ static inline size_t ALIGN_TO(size_t l, size_t ali) {
         })
 
 #undef MAX
-#define MAX(a, b) __MAX(UNIQ, (a), UNIQ, (b))
-#define __MAX(aq, a, bq, b)                             \
-        ({                                              \
-                const typeof(a) UNIQ_T(A, aq) = (a);    \
-                const typeof(b) UNIQ_T(B, bq) = (b);    \
-                UNIQ_T(A, aq) > UNIQ_T(B, bq) ? UNIQ_T(A, aq) : UNIQ_T(B, bq); \
-        })
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 #undef MIN
-#define MIN(a, b) __MIN(UNIQ, (a), UNIQ, (b))
-#define __MIN(aq, a, bq, b)                             \
-        ({                                              \
-                const typeof(a) UNIQ_T(A, aq) = (a);    \
-                const typeof(b) UNIQ_T(B, bq) = (b);    \
-                UNIQ_T(A, aq) < UNIQ_T(B, bq) ? UNIQ_T(A, aq) : UNIQ_T(B, bq); \
-        })
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-#define CMP(a, b) __CMP(UNIQ, (a), UNIQ, (b))
-#define __CMP(aq, a, bq, b)                             \
-        ({                                              \
-                const typeof(a) UNIQ_T(A, aq) = (a);    \
-                const typeof(b) UNIQ_T(B, bq) = (b);    \
-                UNIQ_T(A, aq) < UNIQ_T(B, bq) ? -1 :    \
-                UNIQ_T(A, aq) > UNIQ_T(B, bq) ? 1 : 0;  \
-        })
+#define CMP(a, b) (((a) < (b)) ? -1 : ((a) > (b)) ? 1 : 0)
 
 #undef CLAMP
-#define CLAMP(x, low, high) __CLAMP(UNIQ, (x), UNIQ, (low), UNIQ, (high))
-#define __CLAMP(xq, x, lowq, low, highq, high)                          \
-        ({                                                              \
-                const typeof(x) UNIQ_T(X, xq) = (x);                    \
-                const typeof(low) UNIQ_T(LOW, lowq) = (low);            \
-                const typeof(high) UNIQ_T(HIGH, highq) = (high);        \
-                        UNIQ_T(X, xq) > UNIQ_T(HIGH, highq) ?           \
-                                UNIQ_T(HIGH, highq) :                   \
-                                UNIQ_T(X, xq) < UNIQ_T(LOW, lowq) ?     \
-                                        UNIQ_T(LOW, lowq) :             \
-                                        UNIQ_T(X, xq);                  \
-        })
+#define CLAMP(x, low, high) (((x) < (low)) ? (low) : ((x) > (high)) ? (high) : (x))
 
 /* [(x + y - 1) / y] suffers from an integer overflow, even though the
  * computation should be possible in the given type. Therefore, we use
  * [x / y + !!(x % y)]. Note that on "Real CPUs" a division returns both the
  * quotient and the remainder, so both should be equally fast. */
-// 在DIV_ROUND_UP宏定义前添加保护条件
+// 使用更简单的方法避免与 Zephyr 的 DIV_ROUND_UP 冲突
+#ifdef __ZEPHYR__
+// 直接使用 Zephyr 的 DIV_ROUND_UP 定义，不再重定义
+#else
 #ifndef DIV_ROUND_UP
 #define DIV_ROUND_UP(_x, _y)                                            \
-        ({                                                              \
-                const typeof(_x) __x = (_x);                            \
-                const typeof(_y) __y = (_y);                            \
-                (__x + __y - 1) / __y;                                  \
-        })
+		({                                                              \
+			const typeof(_x) __x = (_x);                            \
+			const typeof(_y) __y = (_y);                            \
+			(__x + __y - 1) / __y;                                  \
+		})
+#endif
 #endif
 
 #ifdef __COVERITY__

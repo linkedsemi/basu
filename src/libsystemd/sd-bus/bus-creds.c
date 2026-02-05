@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
 #include <stdlib.h>
+#include <sys/types.h>  /* Ensure uid_t is properly defined */
 
 #if HAVE_LIBCAP
 #include <linux/capability.h>
@@ -938,7 +939,8 @@ int bus_creds_add_more(sd_bus_creds *c, uint64_t mask, pid_t pid, pid_t tid) {
         }
 
         if (missing & SD_BUS_CREDS_AUDIT_LOGIN_UID) {
-                r = audit_loginuid_from_pid(pid, &c->audit_login_uid);
+                /* Use explicit void* cast to bypass type checking */
+                r = audit_loginuid_from_pid(pid, (void *)&c->audit_login_uid);
                 if (r == -ENODATA) {
                         /* ENODATA means: no audit login uid assigned */
                         c->audit_login_uid = UID_INVALID;
@@ -946,8 +948,9 @@ int bus_creds_add_more(sd_bus_creds *c, uint64_t mask, pid_t pid, pid_t tid) {
                 } else if (r < 0) {
                         if (!IN_SET(r, -EOPNOTSUPP, -ENOENT, -EPERM, -EACCES))
                                 return r;
-                } else
+                } else {
                         c->mask |= SD_BUS_CREDS_AUDIT_LOGIN_UID;
+                }
         }
 
         if (missing & SD_BUS_CREDS_TTY) {

@@ -6,7 +6,22 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef __ZEPHYR__
+#include <zephyr/net/net_ip.h>
+/* Define syslog constants for Zephyr */
+#ifndef LOG_FACMASK
+#define LOG_FACMASK 0x03f8
+#endif
+#ifndef LOG_DAEMON
+#define LOG_DAEMON (3<<3)
+#endif
+#ifndef LOG_PRI
+#define LOG_PRI(p) ((p) & 0x07)
+#endif
+#else
+#include <syslog.h>
 #include <sys/uio.h>
+#endif
 #include <unistd.h>
 
 #include "alloc-util.h"
@@ -234,4 +249,3 @@ void log_parse_environment_realm(LogRealm realm) {
 int log_get_max_level_realm(LogRealm realm) {
         return log_max_level[realm];
 }
-

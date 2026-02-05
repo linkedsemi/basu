@@ -1,11 +1,15 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
+#ifdef __ZEPHYR__
+#include <zephyr/posix/poll.h>
+#else
 #include <poll.h>
+#endif
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "sd-bus.h"
-#include "sd-daemon.h"
+#include "../../systemd/sd-bus.h"
+#include "../sd-daemon/sd-daemon.h"
 
 #include "alloc-util.h"
 #include "bus-internal.h"
@@ -1070,4 +1074,3 @@ int bus_socket_process_authenticating(sd_bus *b) {
 
         return bus_socket_read_auth(b);
 }
-

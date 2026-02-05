@@ -8,6 +8,10 @@
 #include "log.h"
 #include "process-util.h"
 #include "string-util.h"
+
+/* Define LOG_ERR directly to ensure it's available for log_error */
+#define LOG_ERR 3
+
 #include "verbs.h"
 
 int dispatch_verb(int argc, char *argv[], const Verb verbs[], void *userdata) {

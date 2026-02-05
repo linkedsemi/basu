@@ -18,12 +18,7 @@ ssize_t basu_readlinkat(int dirfd, const char *pathname, char *buf, size_t bufsi
                 return -1;
         }
 
-        /* Absolute path or AT_FDCWD: delegate to readlink() if available */
-        if (pathname[0] == '/' || dirfd == AT_FDCWD) {
-                return readlink(pathname, buf, bufsiz);
-        }
-
-        /* No portable way to resolve relative path against dirfd without procfs.
+        /* No readlink implementation available in Zephyr
          * Report not supported instead of pretending success. */
         errno = ENOTSUP;
         return -1;
@@ -68,24 +63,6 @@ int basu_isatty(int fd) {
 }
 
 #ifdef __ZEPHYR__
-void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
-{
-    (void)addr;
-    (void)length;
-    (void)prot;
-    (void)flags;
-    (void)fd;
-    (void)offset;
-    return MAP_FAILED;
-}
-
-int munmap(void *addr, size_t length)
-{
-    (void)addr;
-    (void)length;
-    return 0;
-}
-
 ssize_t writev(int fd, const struct iovec *iov, int iovcnt)
 {
     ssize_t total = 0;
@@ -125,6 +102,9 @@ int ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout, const
 #include <unistd.h>
 
 /* Define the sd_bus_creds structure locally to avoid include issues */
+struct sd_bus_creds;
+typedef struct sd_bus_creds sd_bus_creds;
+
 struct sd_bus_creds {
         bool allocated;
         unsigned n_ref;
@@ -256,4 +236,39 @@ int sd_bus_creds_get_uid(sd_bus_creds *c, uid_t *uid) {
     if (!c || !uid) return -EINVAL;
     *uid = c->uid;
     return 0;
+}
+
+void *memmem(const void *haystack, size_t haystacklen, const void *needle, size_t needlelen) {
+    const unsigned char *h = haystack;
+    const unsigned char *n = needle;
+
+    if (needlelen == 0)
+        return (void *)haystack;
+    if (haystacklen < needlelen)
+        return NULL;
+
+    for (size_t i = 0; i <= haystacklen - needlelen; i++) {
+        if (h[i] == n[0] && memcmp(&h[i], n, needlelen) == 0) {
+            return (void *)&h[i];
+        }
+    }
+    return NULL;
+}
+
+void *mempcpy(void *dest, const void *src, size_t n) {
+    memcpy(dest, src, n);
+    return (unsigned char *)dest + n;
+}
+
+/* Zephyr doesn't have multi-process support, so wait/waitpid are stubs */
+pid_t wait(int *status) {
+    (void)status;
+    return -1; /* No child processes */
+}
+
+pid_t waitpid(pid_t pid, int *status, int options) {
+    (void)pid;
+    (void)status;
+    (void)options;
+    return -1; /* No child processes */
 }

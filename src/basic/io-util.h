@@ -1,8 +1,15 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
+
 #pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
+#ifdef __ZEPHYR__
+#include <zephyr/net/net_ip.h>
+#else
+#include <sys/uio.h>
+#endif
+
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/uio.h>

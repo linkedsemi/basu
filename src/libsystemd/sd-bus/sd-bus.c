@@ -1,12 +1,16 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
 #include <netdb.h>
+#ifdef __ZEPHYR__
+#include <zephyr/posix/poll.h>
+#else
 #include <poll.h>
+#endif
 #include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "sd-bus.h"
+#include "../../systemd/sd-bus.h"
 
 #include "alloc-util.h"
 #include "bus-control.h"

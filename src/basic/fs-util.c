@@ -7,6 +7,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#ifdef __ZEPHYR__
+#include <basu_zephyr_compat.h>
+#endif
+
 #include "alloc-util.h"
 #include "fs-util.h"
 

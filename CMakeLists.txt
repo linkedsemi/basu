@@ -6,13 +6,15 @@ zephyr_library_compile_options(-msmall-data-limit=0 -Wno-redundant-decls -Wno-ne
 zephyr_include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/zephyr/include
   ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/systemd
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/src/basic
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/systemd
   ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd
   ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-bus
   ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-daemon
   ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-id128
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/systemd
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 zephyr_library_compile_definitions(
@@ -26,6 +28,7 @@ zephyr_library_compile_definitions(
   _POSIX_C_SOURCE=200809L
   _XOPEN_SOURCE=700
   _DEFAULT_SOURCE
+  SD_BUS_VTABLE_DEPRECATED=1ULL<<0
 )
 
 # ---- shims & tool glue----
@@ -33,6 +36,22 @@ zephyr_library_sources(
   zephyr/tool/flockfile.c
   zephyr/tool/sys_fun.c
 )
+
+# Create symlink for sd-bus.h to fix include path issue
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-bus/sd-bus.h
+  COMMAND ln -sf ../../systemd/sd-bus.h ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-bus/sd-bus.h
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/systemd/sd-bus.h
+  COMMENT "Creating symlink for sd-bus.h"
+)
+
+# Add the symlink as a dependency
+add_custom_target(create_sd_bus_symlink ALL
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-bus/sd-bus.h
+)
+
+# Make basu library depend on the symlink creation
+add_dependencies(basu create_sd_bus_symlink)
 
 # ===== src/basic =====
 zephyr_library_sources(

@@ -1,7 +1,13 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
+#ifdef __ZEPHYR__
+#include <zephyr/net/net_ip.h>
+#include <zephyr/posix/netinet/in.h>
+#include "basu_zephyr_compat.h"
+#else
 #include <netinet/in.h>
+#endif
 #include <stddef.h>
 #include <string.h>
 #include <sys/types.h>
@@ -25,12 +31,18 @@ union sockaddr_union {
         struct sockaddr_un un;
 };
 
-#ifdef __FreeBSD__
+#ifndef __FreeBSD__
+#ifndef HAVE_STRUCT_UCRED
+#ifdef __ZEPHYR__
+/* struct ucred is defined in basu_zephyr_compat.h */
+#else
 struct ucred {
         uint32_t pid;
         uint32_t uid;
         uint32_t gid;
 };
+#endif
+#endif
 #endif
 
 int fd_inc_sndbuf(int fd, size_t n);

@@ -4,7 +4,8 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
-#include "sd-bus.h"
+#include "../../systemd/sd-bus.h"
+#include "basu_zephyr_compat.h"
 
 #include "alloc-util.h"
 #include "bus-gvariant.h"

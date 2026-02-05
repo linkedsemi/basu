@@ -6,6 +6,10 @@
 
 #include "macro.h"
 
+#ifdef __ZEPHYR__
+#include "basu_zephyr_compat.h"
+#endif
+
 bool is_locale_utf8(void);
 
 typedef enum {

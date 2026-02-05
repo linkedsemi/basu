@@ -2,7 +2,12 @@
 
 #include <errno.h>
 #include <limits.h>
+#ifdef __ZEPHYR__
+#include <zephyr/posix/poll.h>
+#include <basu_zephyr_compat.h>
+#else
 #include <poll.h>
+#endif
 #include <stdio.h>
 #include <unistd.h>
 

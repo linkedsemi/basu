@@ -2,6 +2,7 @@
 #pragma once
 
 #include <inttypes.h>
+#include "config.h"
 
 #if SIZEOF_PID_T == 4
 #  define PID_PRI PRIi32

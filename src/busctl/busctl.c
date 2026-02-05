@@ -8,10 +8,10 @@
 int basu_busctl_entry(int argc, char *argv[]);
 
 #include "alloc-util.h"
-#include "bus-dump.h"
-#include "bus-internal.h"
-#include "bus-signature.h"
-#include "bus-type.h"
+#include "../libsystemd/sd-bus/bus-dump.h"
+#include "../libsystemd/sd-bus/bus-internal.h"
+#include "../libsystemd/sd-bus/bus-signature.h"
+#include "../libsystemd/sd-bus/bus-type.h"
 #include "busctl-introspect.h"
 #include "escape.h"
 #include "fd-util.h"

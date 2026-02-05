@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <sys/socket.h>
 
-#include "sd-bus.h"
+#include "../../systemd/sd-bus.h"
 
 #include "bus-creds.h"
 #include "bus-protocol.h"

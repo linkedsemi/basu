@@ -6,6 +6,15 @@
 #include "errno-list.h"
 #include "macro.h"
 
+#ifdef __ZEPHYR__
+#include "config.h"
+// #include "errno-ext.h"
+#else
+#ifndef GPERF_LEN_TYPE
+#define GPERF_LEN_TYPE size_t
+#endif
+#endif
+
 static const struct errno_name* lookup_errno(register const char *str,
                                              register GPERF_LEN_TYPE len);
 

@@ -8,9 +8,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef __ZEPHYR__
+/* Zephyr doesn't have sys/mman.h or sys/wait.h, use compat headers */
+#include "basu_zephyr_compat.h"
+// #include "errno-ext.h"
+#else
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <syslog.h>
+#endif
+
 #include <unistd.h>
 
 #include "alloc-util.h"
@@ -19,6 +27,7 @@
 #include "fd-util.h"
 #include "fileio.h"
 #include "fs-util.h"
+#include "log.h"
 #include "process-util.h"
 #include "string-util.h"
 #include "util.h"
@@ -163,4 +172,3 @@ int must_be_root(void) {
         log_error("Need to be root.");
         return -EPERM;
 }
-
