@@ -9,8 +9,13 @@
 #include "parse-util.h"
 
 unsigned long cap_last_cap(void) {
+#ifdef __ZEPHYR__
+        static unsigned long saved;
+        static bool valid = false;
+#else
         static thread_local unsigned long saved;
         static thread_local bool valid = false;
+#endif
         _cleanup_free_ char *content = NULL;
         unsigned long p = 0;
         int r;

@@ -111,49 +111,66 @@ FILE* safe_fclose(FILE *f) {
 }
 
 int fd_nonblock(int fd, bool nonblock) {
-        int flags, nflags;
+	int flags, nflags;
 
-        assert(fd >= 0);
+	assert(fd >= 0);
 
-        flags = fcntl(fd, F_GETFL, 0);
-        if (flags < 0)
-                return -errno;
+#ifdef __ZEPHYR__
+	/*
+	 * Zephyr sockets created with socketpair() are already non-blocking,
+	 * and fcntl() may not be fully supported on sockets.
+	 * Skip fcntl operations on Zephyr.
+	 */
+	return 0;
+#else
+	flags = fcntl(fd, F_GETFL, 0);
+	if (flags < 0)
+		return -errno;
 
-        if (nonblock)
-                nflags = flags | O_NONBLOCK;
-        else
-                nflags = flags & ~O_NONBLOCK;
+	if (nonblock)
+		nflags = flags | O_NONBLOCK;
+	else
+		nflags = flags & ~O_NONBLOCK;
 
-        if (nflags == flags)
-                return 0;
+	if (nflags == flags)
+		return 0;
 
-        if (fcntl(fd, F_SETFL, nflags) < 0)
-                return -errno;
+	if (fcntl(fd, F_SETFL, nflags) < 0)
+		return -errno;
 
-        return 0;
+	return 0;
+#endif
 }
 
 int fd_cloexec(int fd, bool cloexec) {
-        int flags, nflags;
+	int flags, nflags;
 
-        assert(fd >= 0);
+	assert(fd >= 0);
 
-        flags = fcntl(fd, F_GETFD, 0);
-        if (flags < 0)
-                return -errno;
+#ifdef __ZEPHYR__
+	/*
+	 * Zephyr doesn't support FD_CLOEXEC in the traditional sense.
+	 * Skip fcntl operations on Zephyr.
+	 */
+	return 0;
+#else
+	flags = fcntl(fd, F_GETFD, 0);
+	if (flags < 0)
+		return -errno;
 
-        if (cloexec)
-                nflags = flags | FD_CLOEXEC;
-        else
-                nflags = flags & ~FD_CLOEXEC;
+	if (cloexec)
+		nflags = flags | FD_CLOEXEC;
+	else
+		nflags = flags & ~FD_CLOEXEC;
 
-        if (nflags == flags)
-                return 0;
+	if (nflags == flags)
+		return 0;
 
-        if (fcntl(fd, F_SETFD, nflags) < 0)
-                return -errno;
+	if (fcntl(fd, F_SETFD, nflags) < 0)
+		return -errno;
 
-        return 0;
+	return 0;
+#endif
 }
 
 int fd_move_above_stdio(int fd) {

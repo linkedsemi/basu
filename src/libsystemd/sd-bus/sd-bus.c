@@ -49,9 +49,16 @@
 
 static int bus_poll(sd_bus *bus, bool need_more, uint64_t timeout_usec);
 
+#ifdef __ZEPHYR__
+/* Use global variables on Zephyr to avoid thread-local storage issues with XIP */
+static sd_bus *default_system_bus = NULL;
+static sd_bus *default_user_bus = NULL;
+static sd_bus *default_starter_bus = NULL;
+#else
 static thread_local sd_bus *default_system_bus = NULL;
 static thread_local sd_bus *default_user_bus = NULL;
 static thread_local sd_bus *default_starter_bus = NULL;
+#endif
 
 static sd_bus **bus_choose_default(int (**bus_open)(sd_bus **)) {
         const char *e;
@@ -886,22 +893,30 @@ static int bus_start_fd(sd_bus *b) {
         if (r < 0)
                 return r;
 
-        r = fd_cloexec(b->input_fd, true);
-        if (r < 0)
-                return r;
+	r = fd_cloexec(b->input_fd, true);
+	if (r < 0)
+		return r;
 
-        if (b->input_fd != b->output_fd) {
-                r = fd_nonblock(b->output_fd, true);
-                if (r < 0)
-                        return r;
+	if (b->input_fd != b->output_fd) {
+		r = fd_nonblock(b->output_fd, true);
+		if (r < 0)
+			return r;
 
-                r = fd_cloexec(b->output_fd, true);
-                if (r < 0)
-                        return r;
-        }
+		r = fd_cloexec(b->output_fd, true);
+		if (r < 0)
+			return r;
+	}
 
-        if (fstat(b->input_fd, &st) < 0)
-                return -errno;
+#ifdef __ZEPHYR__
+	/*
+	 * Zephyr's fstat() may not support socket fds properly.
+	 * Skip this check on Zephyr.
+	 */
+	(void)st;
+#else
+	if (fstat(b->input_fd, &st) < 0)
+		return -errno;
+#endif
 
         return bus_socket_take_fd(b);
 }

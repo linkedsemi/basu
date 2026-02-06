@@ -35,6 +35,7 @@ zephyr_library_compile_definitions(
 zephyr_library_sources(
   zephyr/tool/flockfile.c
   zephyr/tool/sys_fun.c
+  zephyr/src/sys_mmap.c
 )
 
 # Create symlink for sd-bus.h to fix include path issue

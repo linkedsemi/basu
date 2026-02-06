@@ -327,7 +327,13 @@ static inline int __coverity_check__(int condition) {
 #if __STDC_VERSION__ >= 201112L && !(defined(__STDC_NO_THREADS__) || (defined(__GNU_LIBRARY__) && __GLIBC__ == 2 && __GLIBC_MINOR__ < 16))
 #define thread_local _Thread_local
 #else
+/* On Zephyr with XIP, thread-local storage causes linker errors.
+ * Use global variables instead. */
+#ifdef __ZEPHYR__
+#define thread_local
+#else
 #define thread_local __thread
+#endif
 #endif
 #endif
 

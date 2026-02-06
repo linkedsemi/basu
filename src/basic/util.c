@@ -22,7 +22,11 @@ int saved_argc = 0;
 char **saved_argv = NULL;
 
 size_t page_size(void) {
+#ifdef __ZEPHYR__
+        static size_t pgsz = 0;
+#else
         static thread_local size_t pgsz = 0;
+#endif
         long r;
 
         if (_likely_(pgsz > 0))
