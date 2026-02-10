@@ -9,6 +9,7 @@
 #include "xml.h"
 
 #define NODE_DEPTH_MAX 16
+#define LOG_ERR     3
 
 typedef struct Context {
         const XMLIntrospectOps *ops;

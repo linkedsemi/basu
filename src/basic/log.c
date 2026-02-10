@@ -33,7 +33,13 @@
 #include "syslog-util.h"
 #include "util.h"
 
+#ifdef __ZEPHYR__
+#define LOG_ERR     3
+/* Set max level to DEBUG for Zephyr to help debugging */
+static int log_max_level[] = {LOG_DEBUG, LOG_DEBUG};
+#else
 static int log_max_level[] = {LOG_INFO, LOG_INFO};
+#endif
 assert_cc(ELEMENTSOF(log_max_level) == _LOG_REALM_MAX);
 
 
@@ -62,6 +68,11 @@ static int write_to_console(
                 const char *func,
                 const char *buffer) {
 
+#ifdef __ZEPHYR__
+        /* Use printk for Zephyr platform */
+        printk("<%i> %s:%i %s\n", level, file, line, buffer);
+        return 1;
+#else
         char location[256], prefix[1 + DECIMAL_STR_MAX(int) + 2];
         struct iovec iovec[6] = {};
         size_t n = 0;
@@ -80,6 +91,7 @@ static int write_to_console(
         }
 
         return 1;
+#endif
 }
 
 static int log_dispatch_internal(

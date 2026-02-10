@@ -10,7 +10,10 @@
 #include "string-util.h"
 
 /* Define LOG_ERR directly to ensure it's available for log_error */
+#ifdef LOG_ERR
+#undef LOG_ERR
 #define LOG_ERR 3
+#endif
 
 #include "verbs.h"
 

@@ -10,6 +10,7 @@
 #include <string.h>
 
 #ifdef __ZEPHYR__
+// #define LOG_ERR     3
 /* Zephyr doesn't have sys/mman.h or sys/wait.h, use compat headers */
 #include "basu_zephyr_compat.h"
 // #include "errno-ext.h"
@@ -169,6 +170,6 @@ int must_be_root(void) {
         if (geteuid() == 0)
                 return 0;
 
-        log_error("Need to be root.");
+        // log_error("Need to be root.");
         return -EPERM;
 }

@@ -1,14 +1,10 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
-#ifdef __ZEPHYR__
-#include <zephyr/posix/poll.h>
-#else
 #include <poll.h>
-#endif
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "../../systemd/sd-bus.h"
+#include "sd-bus.h"
 #include "../sd-daemon/sd-daemon.h"
 
 #include "alloc-util.h"
@@ -134,17 +130,18 @@ static int bus_socket_write_null_byte(sd_bus *b) {
 #define SOCKET_CRED_OPTION SCM_CREDS
         struct cmsgcred creds = { 0 };
 #elif defined(__ZEPHYR__)
-/* Zephyr doesn't support socket credentials, use dummy values */
-        struct {
-                pid_t pid;
-                uid_t uid;
-                gid_t gid;
-        } creds = { .pid = 0, .uid = 0, .gid = 0 };
-#define SOCKET_CRED_OPTION SO_PASSCRED
+        /* Zephyr doesn't support SCM_CREDENTIALS, just send null byte */
+        const uint8_t null_byte = 0;
+        ssize_t k = zsock_send(b->output_fd, &null_byte, 1, MSG_DONTWAIT);
+        if (k < 0)
+                return errno == EAGAIN ? 0 : -errno;
+        b->send_null_byte = false;
+        return 1;
 #else
 #error auth not implemented for this OS
 #endif
 
+#ifndef __ZEPHYR__
         union {
                 struct cmsghdr hdr;
                 uint8_t buf[CMSG_SPACE(sizeof(creds))];
@@ -174,6 +171,7 @@ static int bus_socket_write_null_byte(sd_bus *b) {
                 return errno == EAGAIN ? 0 : -errno;
         b->send_null_byte = false;
         return 1;
+#endif
 }
 
 static int bus_socket_write_auth(sd_bus *b) {
@@ -1074,3 +1072,4 @@ int bus_socket_process_authenticating(sd_bus *b) {
 
         return bus_socket_read_auth(b);
 }
+

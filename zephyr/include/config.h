@@ -24,7 +24,7 @@
 
 #define NOBODY_USER_NAME "nobody"
 
-#define PACKAGE_STRING "basu 0.2.1"
+// #define PACKAGE_STRING "basu 0.2.1"
 
 #define SIZEOF_DEV_T 8
 

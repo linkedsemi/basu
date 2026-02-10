@@ -181,6 +181,26 @@
 #undef LOG_PRI
 #endif
 
+#ifdef LOG_ERR
+#undef LOG_ERR
+#define LOG_ERR 3
+#endif
+
+/* Provide log_error stub for Zephyr */
+#ifndef log_error
+#define log_error(fmt, ...) do { \
+    LOG_ERR(fmt ": %s", ##__VA_ARGS__, strerror(errno)); \
+} while(0)
+#endif
+
+#ifndef log_info
+#define log_info(fmt, ...) LOG_INF(fmt, ##__VA_ARGS__)
+#endif
+
+#ifndef log_debug
+#define log_debug(fmt, ...) LOG_DBG(fmt, ##__VA_ARGS__)
+#endif
+
 // 只有在Zephyr没有定义的情况下才定义这些宏
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0

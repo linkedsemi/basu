@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
-#include <pthread.h>
 #ifdef __ZEPHYR__
 #include <zephyr/net/socket.h>
 #else
+#include <pthread.h>
 #include <sys/socket.h>
 #endif
 
@@ -21,6 +21,10 @@
 #include "refcnt.h"
 #include "socket-util.h"
 #include "util.h"
+
+#ifndef LOG_ERR
+#define LOG_ERR     3
+#endif
 
 struct reply_callback {
         sd_bus_message_handler_t callback;
