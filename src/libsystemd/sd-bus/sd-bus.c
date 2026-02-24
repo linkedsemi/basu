@@ -205,6 +205,7 @@ _public_ int sd_bus_new(sd_bus **ret) {
                 .original_pid = getpid_cached(),
                 .n_groups = (size_t) -1,
                 .close_on_exit = true,
+                .cookie = 0, /* Initialize cookie to 0 */
         };
 
         assert_se(pthread_mutex_init(&b->memfd_cache_mutex, NULL) == 0);
@@ -896,10 +897,15 @@ static int bus_start_fd(sd_bus *b) {
                         return r;
         }
 
+#ifdef __ZEPHYR__
+        /* On Zephyr, fstat on sockets may not be reliable. Skip this check. */
+        return bus_socket_take_fd(b);
+#else
         if (fstat(b->input_fd, &st) < 0)
                 return -errno;
 
         return bus_socket_take_fd(b);
+#endif
 }
 
 _public_ int sd_bus_start(sd_bus *bus) {
@@ -1684,6 +1690,10 @@ _public_ int sd_bus_call(
                                 bus->rqueue_size--;
                                 log_debug_bus_message(incoming);
 
+#ifdef __ZEPHYR__
+                                log_debug("sd_bus_call: Found matching reply, incoming->header->type=%u",
+                                         incoming->header->type);
+#endif
                                 if (incoming->header->type == SD_BUS_MESSAGE_METHOD_RETURN) {
 
                                         if (incoming->n_fds <= 0 || bus->accept_fd) {
@@ -1691,7 +1701,9 @@ _public_ int sd_bus_call(
                                                         *reply = incoming;
                                                 else
                                                         sd_bus_message_unref(incoming);
-
+#ifdef __ZEPHYR__
+                                                log_debug("sd_bus_call: Returning 1 (success)");
+#endif
                                                 return 1;
                                         }
 
@@ -1775,6 +1787,9 @@ _public_ int sd_bus_call(
         }
 
 fail:
+#ifdef __ZEPHYR__
+        log_debug("sd_bus_call: fail, r=%d (%s)", r, strerror(-r));
+#endif
         return sd_bus_error_set_errno(error, r);
 }
 
@@ -1963,6 +1978,11 @@ static int process_hello(sd_bus *bus, sd_bus_message *m) {
         assert(bus);
         assert(m);
 
+#ifdef __ZEPHYR__
+        log_debug("process_hello: bus->state=%d, m->header->type=%u, m->reply_cookie=%u",
+                 bus->state, m->header->type, m->reply_cookie);
+#endif
+
         if (bus->state != BUS_HELLO)
                 return 0;
 
@@ -1971,12 +1991,23 @@ static int process_hello(sd_bus *bus, sd_bus_message *m) {
          * here (we leave that to the usual handling), we just verify
          * we don't let any earlier msg through. */
 
-        if (!IN_SET(m->header->type, SD_BUS_MESSAGE_METHOD_RETURN, SD_BUS_MESSAGE_METHOD_ERROR))
+        if (!IN_SET(m->header->type, SD_BUS_MESSAGE_METHOD_RETURN, SD_BUS_MESSAGE_METHOD_ERROR)) {
+#ifdef __ZEPHYR__
+                log_debug("process_hello: Wrong message type, returning -EIO");
+#endif
                 return -EIO;
+        }
 
-        if (m->reply_cookie != 1)
+        if (m->reply_cookie != 1) {
+#ifdef __ZEPHYR__
+                log_debug("process_hello: reply_cookie != 2 (%u != 2), returning -EIO", m->reply_cookie);
+#endif
                 return -EIO;
+        }
 
+#ifdef __ZEPHYR__
+        log_debug("process_hello: Success, returning 0");
+#endif
         return 0;
 }
 
@@ -2578,7 +2609,15 @@ static int bus_poll(sd_bus *bus, bool need_more, uint64_t timeout_usec) {
         if (timeout_usec != (uint64_t) -1 && (m == USEC_INFINITY || timeout_usec < m))
                 m = timeout_usec;
 
+#ifdef __ZEPHYR__
+        // log_debug("bus_poll: ppoll(fd=%d, events=%u, timeout=%llu)", p[0].fd, p[0].events,
+        //          m == USEC_INFINITY ? 0ULL : m);
+#endif
+        errno = 0;
         r = ppoll(p, n, m == USEC_INFINITY ? NULL : timespec_store(&ts, m), NULL);
+#ifdef __ZEPHYR__
+        // log_debug("bus_poll: ppoll returned %d, errno=%d (%s)", r, errno, strerror(errno));
+#endif
         if (r < 0)
                 return -errno;
 

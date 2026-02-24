@@ -48,7 +48,9 @@ enum {
         _BUS_INVALID_ENDIAN = 0,
         BUS_LITTLE_ENDIAN   = 'l',
         BUS_BIG_ENDIAN      = 'B',
-#if (defined(__FreeBSD__) && _BYTE_ORDER == _BIG_ENDIAN) || (defined(__linux__) && __BYTE_ORDER == __BIG_ENDIAN)
+#if (defined(__FreeBSD__) && _BYTE_ORDER == _BIG_ENDIAN) || \
+    (defined(__linux__) && __BYTE_ORDER == __BIG_ENDIAN) || \
+    (defined(__ZEPHYR__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
         BUS_NATIVE_ENDIAN   = BUS_BIG_ENDIAN,
         BUS_REVERSE_ENDIAN  = BUS_LITTLE_ENDIAN
 #else
