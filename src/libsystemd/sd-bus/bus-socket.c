@@ -5,7 +5,7 @@
 #include <unistd.h>
 
 #include "sd-bus.h"
-#include "../sd-daemon/sd-daemon.h"
+#include "sd-daemon.h"
 
 #include "alloc-util.h"
 #include "bus-internal.h"
@@ -191,15 +191,7 @@ static int bus_socket_write_auth(sd_bus *b) {
         if (!bus_socket_auth_needs_write(b))
                 return 0;
 
-#ifdef __ZEPHYR__
-        log_debug("bus_socket_write_auth: Writing auth data, output_fd=%d, auth_index=%u, send_null_byte=%d",
-                  b->output_fd, b->auth_index, b->send_null_byte);
-#endif
-
         if (b->send_null_byte) {
-#ifdef __ZEPHYR__
-                log_debug("bus_socket_write_auth: Writing null byte");
-#endif
                 return bus_socket_write_null_byte(b);
         }
 
@@ -212,7 +204,6 @@ static int bus_socket_write_auth(sd_bus *b) {
 #ifdef __ZEPHYR__
         /* Zephyr doesn't support MSG_NOSIGNAL */
         k = sendmsg(b->output_fd, &mh, MSG_DONTWAIT);
-        log_debug("bus_socket_write_auth: sendmsg returned %zd, errno=%d (%s)", k, errno, strerror(errno));
 #else
         k = sendmsg(b->output_fd, &mh, MSG_DONTWAIT|MSG_NOSIGNAL);
 #endif
@@ -471,23 +462,14 @@ static int bus_socket_auth_verify_server(sd_bus *b) {
                                 r = bus_socket_auth_write_ok(b);
                         }
 
-                } else                 if (line_begins(line, l, "AUTH EXTERNAL")) {
+                } else if (line_begins(line, l, "AUTH EXTERNAL")) {
 
-#ifdef __ZEPHYR__
-                        log_debug("bus_socket_read_auth: Received AUTH EXTERNAL");
-#endif
                         r = verify_external_token(b, line + 13, l - 13);
                         if (r < 0)
                                 return r;
-                        if (r == 0) {
-#ifdef __ZEPHYR__
-                                log_debug("bus_socket_read_auth: EXTERNAL token verification failed");
-#endif
+                        if (r == 0)
                                 r = bus_socket_auth_write(b, "REJECTED\r\n");
-                        } else {
-#ifdef __ZEPHYR__
-                                log_debug("bus_socket_read_auth: EXTERNAL token OK");
-#endif
+                        else {
                                 b->auth = BUS_AUTH_EXTERNAL;
                                 r = bus_socket_auth_write_ok(b);
                         }
@@ -502,26 +484,23 @@ static int bus_socket_auth_verify_server(sd_bus *b) {
 
                 } else if (line_equals(line, l, "BEGIN")) {
 
-        if (b->auth == _BUS_AUTH_INVALID)
-                r = bus_socket_auth_write(b, "ERROR\r\n");
-        else {
-                /* We can't leave from the auth phase
-                 * before we haven't written
-                 * everything queued, so let's check
-                 * that */
+                        if (b->auth == _BUS_AUTH_INVALID)
+                                r = bus_socket_auth_write(b, "ERROR\r\n");
+                        else {
+                                /* We can't leave from the auth phase
+                                 * before we haven't written
+                                 * everything queued, so let's check
+                                 * that */
 
-                if (bus_socket_auth_needs_write(b))
-                        return 1;
+                                if (bus_socket_auth_needs_write(b))
+                                        return 1;
 
-#ifdef __ZEPHYR__
-                log_debug("bus_socket_read_auth: AUTH complete, starting bus");
-#endif
-                b->rbuffer_size -= (e + 2 - (char*) b->rbuffer);
-                memmove(b->rbuffer, e + 2, b->rbuffer_size);
-                return bus_start_running(b);
-        }
+                                b->rbuffer_size -= (e + 2 - (char*) b->rbuffer);
+                                memmove(b->rbuffer, e + 2, b->rbuffer_size);
+                                return bus_start_running(b);
+                        }
 
-        } else if (line_begins(line, l, "DATA")) {
+                } else if (line_begins(line, l, "DATA")) {
 
                         if (b->auth == _BUS_AUTH_INVALID)
                                 r = bus_socket_auth_write(b, "ERROR\r\n");
@@ -607,17 +586,12 @@ static int bus_socket_read_auth(sd_bus *b) {
 #if defined(__linux__)
                 char creds[CMSG_SPACE(sizeof(struct ucred))];
 #elif defined(__FreeBSD__)
-                char creds[CMSG_SPACE(sizeof(struct cmsgcred)];
+                char creds[CMSG_SPACE(sizeof(struct cmsgcred))];
 #endif
         } control;
 
         assert(b);
         assert(b->state == BUS_AUTHENTICATING);
-
-#ifdef __ZEPHYR__
-        log_debug("bus_socket_read_auth: Starting auth, anonymous_auth=%d, ucred_valid=%d, is_server=%d",
-                  b->anonymous_auth, b->ucred_valid, b->is_server);
-#endif
 
         r = bus_socket_auth_verify(b);
         if (r != 0)
@@ -931,24 +905,6 @@ static int bus_socket_read_message_need(sd_bus *bus, size_t *need) {
         assert(need);
         assert(IN_SET(bus->state, BUS_RUNNING, BUS_HELLO));
 
-#if 0
-//#ifdef __ZEPHYR__
-        if (bus->rbuffer_size > 0) {
-                log_debug("bus_socket_read_message_need[ENTRY]: rbuffer_size=%zu, first 16 bytes: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
-                         bus->rbuffer_size,
-                         ((uint8_t*)bus->rbuffer)[0], ((uint8_t*)bus->rbuffer)[1],
-                         ((uint8_t*)bus->rbuffer)[2], ((uint8_t*)bus->rbuffer)[3],
-                         ((uint8_t*)bus->rbuffer)[4], ((uint8_t*)bus->rbuffer)[5],
-                         ((uint8_t*)bus->rbuffer)[6], ((uint8_t*)bus->rbuffer)[7],
-                         ((uint8_t*)bus->rbuffer)[8], ((uint8_t*)bus->rbuffer)[9],
-                         ((uint8_t*)bus->rbuffer)[10], ((uint8_t*)bus->rbuffer)[11],
-                         ((uint8_t*)bus->rbuffer)[12], ((uint8_t*)bus->rbuffer)[13],
-                         ((uint8_t*)bus->rbuffer)[14], ((uint8_t*)bus->rbuffer)[15]);
-        } else {
-                log_debug("bus_socket_read_message_need[ENTRY]: rbuffer_size=%zu (empty)", bus->rbuffer_size);
-        }
-#endif
-
         if (bus->rbuffer_size < sizeof(struct bus_header)) {
                 *need = sizeof(struct bus_header) + 8;
 
@@ -971,24 +927,10 @@ static int bus_socket_read_message_need(sd_bus *bus, size_t *need) {
                 return 0;
         }
 
-#ifdef __ZEPHYR__
-        /* Safety check: ensure we have enough buffer before accessing header fields */
-        if (bus->rbuffer_size < sizeof(struct bus_header) + 8) {
-                // log_debug("bus_socket_read_message_need: rbuffer_size=%zu < header+8, returning min size",
-                //          bus->rbuffer_size);
-                *need = sizeof(struct bus_header) + 8;
-                return 0;
-        }
-#endif
-
         a = ((const uint32_t*) bus->rbuffer)[1];
         b = ((const uint32_t*) bus->rbuffer)[3];
 
         e = ((const uint8_t*) bus->rbuffer)[0];
-#ifdef __ZEPHYR__
-        log_debug("bus_socket_read_message_need: endian byte=%d (%c), BUS_LITTLE_ENDIAN=%d, BUS_BIG_ENDIAN=%d",
-                 e, (isprint(e) ? e : '?'), BUS_LITTLE_ENDIAN, BUS_BIG_ENDIAN);
-#endif
         if (e == BUS_LITTLE_ENDIAN) {
                 a = le32toh(a);
                 b = le32toh(b);
@@ -1014,27 +956,6 @@ static int bus_socket_make_message(sd_bus *bus, size_t size) {
         assert(bus);
         assert(bus->rbuffer_size >= size);
         assert(IN_SET(bus->state, BUS_RUNNING, BUS_HELLO));
-#if 0
-// #ifdef __ZEPHYR__
-        /* Log message header for debugging */
-        if (size >= sizeof(struct bus_header)) {
-                struct bus_header *h = (struct bus_header *)bus->rbuffer;
-                uint32_t fields_size, body_size;
-
-                /* Determine endianness and swap if needed */
-                if (h->endian == BUS_LITTLE_ENDIAN) {
-                        fields_size = le32toh(h->dbus1.fields_size);
-                        body_size = le32toh(h->dbus1.body_size);
-                } else {
-                        fields_size = be32toh(h->dbus1.fields_size);
-                        body_size = be32toh(h->dbus1.body_size);
-                }
-
-                log_debug("bus_socket_make_message: size=%zu, type=%d, endian=%d, version=%d",
-                         size, h->type, h->endian, h->version);
-                log_debug("  fields_size=%u, body_size=%u", fields_size, body_size);
-        }
-#endif
 
         r = bus_rqueue_make_room(bus);
         if (r < 0)
@@ -1060,10 +981,6 @@ static int bus_socket_make_message(sd_bus *bus, size_t size) {
 
         bus->rbuffer = b;
         bus->rbuffer_size -= size;
-#ifdef __ZEPHYR__
-        // log_debug("bus_socket_make_message: After extracting message, rbuffer_size=%zu (was %zu, extracted %zu)",
-        //          bus->rbuffer_size, bus->rbuffer_size + size, size);
-#endif
 
         bus->fds = NULL;
         bus->n_fds = 0;
@@ -1088,40 +1005,15 @@ int bus_socket_read_message(sd_bus *bus) {
         assert(bus);
         assert(IN_SET(bus->state, BUS_RUNNING, BUS_HELLO));
 
-#ifdef __ZEPHYR__
-        // log_debug("bus_socket_read_message[ENTRY]: rbuffer=%p, rbuffer_size=%zu",
-        //          bus->rbuffer, bus->rbuffer_size);
-#endif
-
         r = bus_socket_read_message_need(bus, &need);
-        if (r < 0) {
-                log_debug("bus_socket_read_message: bus_socket_read_message_need failed: %d", r);
+        if (r < 0)
                 return r;
-        }
 
-#ifdef __ZEPHYR__
-        // log_debug("bus_socket_read_message: After need, rbuffer=%p, rbuffer_size=%zu, need=%zu",
-        //          bus->rbuffer, bus->rbuffer_size, need);
-#endif
-
-        if (bus->rbuffer_size >= need) {
-#ifdef __ZEPHYR__
-                // log_debug("bus_socket_read_message: Making message, rbuffer_size=%zu, need=%zu",
-                //          bus->rbuffer_size, need);
-#endif
+        if (bus->rbuffer_size >= need)
                 return bus_socket_make_message(bus, need);
-        }
 
-#ifdef __ZEPHYR__
-        /* Zephyr's recvmsg doesn't respect iov.iov_len.
-         * Allocate a larger buffer to handle overflow safely. */
-        size_t alloc_size = MAX(need, 256);
-        // log_debug("bus_socket_read_message: Realloc rbuffer, current=%zu, need=%zu, alloc=%zu",
-        //          bus->rbuffer_size, need, alloc_size);
-#else
         size_t alloc_size = need;
-#endif
-        b = realloc(bus->rbuffer, alloc_size);
+        b = realloc(bus->rbuffer, need);
         if (!b)
                 return -ENOMEM;
 

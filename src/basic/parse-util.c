@@ -17,6 +17,8 @@
 #include "process-util.h"
 #include "string-util.h"
 
+#define LC_NUMERIC_MASK 2
+
 int parse_boolean(const char *v) {
         assert(v);
 
@@ -222,9 +224,12 @@ int safe_atod(const char *s, double *ret_d) {
         assert(s);
         assert(ret_d);
 
-        /* Use standard strtod instead of locale-specific strtod_l */
+        loc = newlocale(LC_NUMERIC_MASK, "C", (locale_t) 0);
+        if (loc == (locale_t) 0)
+                return -errno;
+
         errno = 0;
-        d = strtod(s, &x);
+        d = strtod_l(s, &x, loc);
         if (errno > 0)
                 return -errno;
         if (!x || x == s || *x != 0)

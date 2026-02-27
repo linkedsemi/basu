@@ -460,3 +460,4 @@ int sd_bus_creds_get_uid(sd_bus_creds *c, uid_t *uid) {
     *uid = c->uid;
     return 0;
 }
+

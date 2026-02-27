@@ -8,7 +8,7 @@
 #include <errno.h>
 #include <string.h>
 
-#include "../../systemd/sd-bus.h"
+#include "sd-bus.h"
 
 #include "bus-gvariant.h"
 #include "bus-signature.h"

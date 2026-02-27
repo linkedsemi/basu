@@ -87,7 +87,7 @@ void* greedy_realloc(void **p, size_t *allocated, size_t need, size_t size);
  * NULL. See: https://doc.rust-lang.org/std/option/enum.Option.html#method.take */
 #define TAKE_PTR(ptr)                           \
         ({                                      \
-                __typeof__(ptr) _ptr_ = (ptr);  \
+                typeof(ptr) _ptr_ = (ptr);      \
                 (ptr) = NULL;                   \
                 _ptr_;                          \
         })

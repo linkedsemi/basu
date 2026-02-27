@@ -8,8 +8,7 @@
 #include <sys/socket.h>
 #endif
 
-/* Use relative path to ensure we find the correct sd-bus.h file */
-#include "../../systemd/sd-bus.h"
+#include "sd-bus.h"
 
 #include "bus-error.h"
 #include "bus-kernel.h"

@@ -50,12 +50,6 @@ typedef struct {
 #define ITERATOR_FIRST ((Iterator) { .idx = _IDX_ITERATOR_FIRST, .next_key = NULL })
 
 /* Macros for type checking */
-#ifdef __ZEPHYR__
-/* Simplified versions for Zephyr that avoid typeof and __builtin_choose_expr */
-#define HASHMAP_BASE(h) ((HashmapBase*)(h))
-#define PLAIN_HASHMAP(h) ((Hashmap*)(h))
-#else
-/* Original versions for other platforms */
 #define PTR_COMPATIBLE_WITH_HASHMAP_BASE(h) \
         (__builtin_types_compatible_p(typeof(h), HashmapBase*) || \
          __builtin_types_compatible_p(typeof(h), Hashmap*) || \
@@ -75,7 +69,6 @@ typedef struct {
         __builtin_choose_expr(PTR_COMPATIBLE_WITH_PLAIN_HASHMAP(h), \
                 (Hashmap*)(h), \
                 (void)0)
-#endif
 
 #if ENABLE_DEBUG_HASHMAP
 # define HASHMAP_DEBUG_PARAMS , const char *func, const char *file, int line

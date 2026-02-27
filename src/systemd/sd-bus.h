@@ -22,7 +22,7 @@
 #include <sys/types.h>
 #ifdef __ZEPHYR__
 #include <zephyr/net/net_ip.h>
-#include "../zephyr/include/basu_zephyr_compat.h"
+#include "basu_zephyr_compat.h"
 #else
 #include <sys/uio.h>
 #endif

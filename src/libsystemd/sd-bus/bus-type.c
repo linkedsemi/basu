@@ -2,7 +2,7 @@
 
 #include <errno.h>
 
-#include "../../systemd/sd-bus.h"
+#include "sd-bus.h"
 
 #include "bus-type.h"
 

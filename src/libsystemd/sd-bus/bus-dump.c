@@ -15,12 +15,7 @@
 #include "terminal-util.h"
 #include "missing.h"
 
-/* Define LOG_ERR directly to ensure it's available for log_error_errno */
-// #ifndef LOG_ERR
 #define LOG_ERR 3
-// #endif
-
-// #include "log.h"
 
 #if HAVE_LIBCAP
 #include "capability-util.h"

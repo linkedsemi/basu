@@ -3,8 +3,7 @@
 #include <errno.h>
 #include <stddef.h>
 
-/* Use relative path to ensure we find the correct sd-bus.h file */
-#include "../../systemd/sd-bus.h"
+#include "sd-bus.h"
 
 #include "alloc-util.h"
 #include "bus-control.h"

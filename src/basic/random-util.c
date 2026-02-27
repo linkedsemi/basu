@@ -18,3 +18,4 @@ int random_bytes(void *p, size_t n) {
                 return errno == ENOENT ? -ENOSYS : -errno;
         return loop_read_exact(fd, p, n, true);
 }
+

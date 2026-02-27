@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#include "../../systemd/sd-bus.h"
+#include "sd-bus.h"
 
 struct sd_bus_creds {
         bool allocated;
