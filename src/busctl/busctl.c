@@ -2324,7 +2324,7 @@ static int busctl_main(int argc, char *argv[]) {
 
         return dispatch_verb(argc, argv, verbs, NULL);
 }
-
+#ifndef __ZEPHYR__
 int main(int argc, char *argv[]) {
         int r;
 
@@ -2342,3 +2342,4 @@ finish:
 
         return r < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
+#endif
