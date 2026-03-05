@@ -325,7 +325,7 @@ static inline int vasprintf(char **strp, const char *fmt, va_list ap) {
         return -1;
     }
     
-    str = malloc(len + 1);
+    str = (char *)malloc(len + 1);
     if (!str) {
         return -1;
     }
@@ -342,7 +342,7 @@ static inline int vasprintf(char **strp, const char *fmt, va_list ap) {
 
 static inline char *strdup(const char *s) {
     size_t len = strlen(s) + 1;
-    char *dup = malloc(len);
+    char *dup = (char *)malloc(len);
     if (dup) {
         memcpy(dup, s, len);
     }
@@ -352,7 +352,7 @@ static inline char *strdup(const char *s) {
 /* Implementation of strndup for Zephyr */
 static inline char *strndup(const char *s, size_t n) {
     size_t len = strnlen(s, n);
-    char *dup = malloc(len + 1);
+    char *dup = (char *)malloc(len + 1);
     if (dup) {
         memcpy(dup, s, len);
         dup[len] = '\0';
@@ -368,7 +368,7 @@ static inline char *stpcpy(char *dest, const char *src) {
 
 /* Implementation of memrchr for Zephyr */
 static inline void *memrchr(const void *s, int c, size_t n) {
-    const unsigned char *p = s;
+    const unsigned char *p = (const unsigned char *)s;
     const unsigned char *e = p + n;
     
     if (n == 0)
