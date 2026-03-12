@@ -97,6 +97,8 @@ zephyr_library_sources(
 )
 
 zephyr_library_sources(
-  ${BASU_SOURCE_DIR}/libsystemd/sd-journal/sd-journal.c)
+  ${BASU_SOURCE_DIR}/libsystemd/sd-journal/sd-journal.c
+  ${BASU_SOURCE_DIR}/libsystemd/sd-event/sd-event.c
+  )
 
 zephyr_include_directories(${BASU_DIR}/include)
