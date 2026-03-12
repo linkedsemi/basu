@@ -95,3 +95,8 @@ zephyr_library_sources(
   ${BASU_SOURCE_DIR}/busctl/busctl-introspect.c
   ${BASU_SOURCE_DIR}/busctl/busctl.c
 )
+
+zephyr_library_sources(
+  ${BASU_SOURCE_DIR}/libsystemd/sd-journal/sd-journal.c)
+
+zephyr_include_directories(${BASU_DIR}/include)
