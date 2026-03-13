@@ -21,6 +21,9 @@
 #include <limits.h>
 #include <ctype.h>  /* Required for tolower function */
 #include <stdarg.h> /* Required for vasprintf function */
+#include <sys/uio.h> /* For struct iovec */
+#include <poll.h>    /* For struct pollfd */
+#include <zephyr/logging/log.h> /* For Zephyr logging */
 
 /* Define __gnuc_va_list for Zephyr compatibility */
 #ifndef __gnuc_va_list
@@ -181,8 +184,7 @@
 #undef LOG_PRI
 #endif
 
-#ifdef LOG_ERR
-#undef LOG_ERR
+#ifndef LOG_ERR
 #define LOG_ERR 3
 #endif
 
@@ -287,8 +289,10 @@ int munmap(void *addr, size_t length);
 
 /* Declare write function if not available */
 #ifndef write
-#include <unistd.h>
+// #include <unistd.h>
 #include <stdio.h>  /* Add stdio.h for FILE type */
+#include <signal.h>
+#include <string.h>
 #endif
 
 /* Type definitions for Zephyr */
