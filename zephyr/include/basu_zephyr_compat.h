@@ -296,7 +296,7 @@ int munmap(void *addr, size_t length);
 #endif
 
 /* Type definitions for Zephyr */
-typedef unsigned long nfds_t;
+// typedef unsigned long nfds_t;
 
 /* Define missing functions */
 ssize_t writev(int fd, const struct iovec *iov, int iovcnt);
@@ -319,114 +319,114 @@ static inline int issetugid(void) {
 #endif
 
 /* Implementation of vasprintf for Zephyr */
-static inline int vasprintf(char **strp, const char *fmt, va_list ap) {
-    int len;
-    char *str;
+// static inline int vasprintf(char **strp, const char *fmt, va_list ap) {
+//     int len;
+//     char *str;
     
-    /* First try with a reasonable size */
-    len = vsnprintf(NULL, 0, fmt, ap);
-    if (len < 0) {
-        return -1;
-    }
+//     /* First try with a reasonable size */
+//     len = vsnprintf(NULL, 0, fmt, ap);
+//     if (len < 0) {
+//         return -1;
+//     }
     
-    str = (char *)malloc(len + 1);
-    if (!str) {
-        return -1;
-    }
+//     str = (char *)malloc(len + 1);
+//     if (!str) {
+//         return -1;
+//     }
     
-    len = vsnprintf(str, len + 1, fmt, ap);
-    if (len < 0) {
-        free(str);
-        return -1;
-    }
+//     len = vsnprintf(str, len + 1, fmt, ap);
+//     if (len < 0) {
+//         free(str);
+//         return -1;
+//     }
     
-    *strp = str;
-    return len;
-}
+//     *strp = str;
+//     return len;
+// }
 
-static inline char *strdup(const char *s) {
-    size_t len = strlen(s) + 1;
-    char *dup = (char *)malloc(len);
-    if (dup) {
-        memcpy(dup, s, len);
-    }
-    return dup;
-}
+// static inline char *strdup(const char *s) {
+//     size_t len = strlen(s) + 1;
+//     char *dup = (char *)malloc(len);
+//     if (dup) {
+//         memcpy(dup, s, len);
+//     }
+//     return dup;
+// }
 
 /* Implementation of strndup for Zephyr */
-static inline char *strndup(const char *s, size_t n) {
-    size_t len = strnlen(s, n);
-    char *dup = (char *)malloc(len + 1);
-    if (dup) {
-        memcpy(dup, s, len);
-        dup[len] = '\0';
-    }
-    return dup;
-}
+// static inline char *strndup(const char *s, size_t n) {
+//     size_t len = strnlen(s, n);
+//     char *dup = (char *)malloc(len + 1);
+//     if (dup) {
+//         memcpy(dup, s, len);
+//         dup[len] = '\0';
+//     }
+//     return dup;
+// }
 
 /* Implementation of stpcpy for Zephyr */
-static inline char *stpcpy(char *dest, const char *src) {
-    while ((*dest++ = *src++) != '\0');
-    return --dest;
-}
+// static inline char *stpcpy(char *dest, const char *src) {
+//     while ((*dest++ = *src++) != '\0');
+//     return --dest;
+// }
 
 /* Implementation of memrchr for Zephyr */
-static inline void *memrchr(const void *s, int c, size_t n) {
-    const unsigned char *p = (const unsigned char *)s;
-    const unsigned char *e = p + n;
+// static inline void *memrchr(const void *s, int c, size_t n) {
+//     const unsigned char *p = (const unsigned char *)s;
+//     const unsigned char *e = p + n;
     
-    if (n == 0)
-        return NULL;
+//     if (n == 0)
+//         return NULL;
     
-    e--;
-    while (e >= p) {
-        if (*e == (unsigned char)c)
-            return (void *)e;
-        e--;
-    }
+//     e--;
+//     while (e >= p) {
+//         if (*e == (unsigned char)c)
+//             return (void *)e;
+//         e--;
+//     }
     
-    return NULL;
-}
+//     return NULL;
+// }
 
 /* Implementation of strchrnul for Zephyr */
-static inline char *strchrnul(const char *s, int c) {
-    if (!s) return NULL;
+// static inline char *strchrnul(const char *s, int c) {
+//     if (!s) return NULL;
     
-    while (*s != '\0' && *s != (char)c) {
-        s++;
-    }
+//     while (*s != '\0' && *s != (char)c) {
+//         s++;
+//     }
     
-    return (char *)s;
-}
+//     return (char *)s;
+// }
 
 /* Implementation of explicit_bzero for Zephyr */
-static inline void explicit_bzero(void *s, size_t n) {
-    memset(s, 0, n);
-    /* Compiler barrier to prevent optimization */
-    __asm__ volatile("" ::: "memory");
-}
+// static inline void explicit_bzero(void *s, size_t n) {
+//     memset(s, 0, n);
+//     /* Compiler barrier to prevent optimization */
+//     __asm__ volatile("" ::: "memory");
+// }
 
-static inline int fileno(FILE *stream) {
-    /* Zephyr doesn't support fileno, return -1 or handle appropriately */
-    (void)stream; /* Suppress unused parameter warning */
-    errno = ENOSYS;
-    return -1;
-}
+// static inline int fileno(FILE *stream) {
+//     /* Zephyr doesn't support fileno, return -1 or handle appropriately */
+//     (void)stream; /* Suppress unused parameter warning */
+//     errno = ENOSYS;
+//     return -1;
+// }
 
 /* File locking functions - stubs since Zephyr doesn't support them */
-static inline void flockfile(FILE *stream) {
-    /* No-op in Zephyr */
-    (void)stream; /* Suppress unused parameter warning */
-}
+// static inline void flockfile(FILE *stream) {
+//     /* No-op in Zephyr */
+//     (void)stream; /* Suppress unused parameter warning */
+// }
 
-static inline void funlockfile(FILE *stream) {
-    /* No-op in Zephyr */
-    (void)stream; /* Suppress unused parameter warning */
-}
+// static inline void funlockfile(FILE *stream) {
+//     /* No-op in Zephyr */
+//     (void)stream; /* Suppress unused parameter warning */
+// }
 
-static inline int ferror_unlocked(FILE *stream) {
-    return ferror(stream);
-}
+// static inline int ferror_unlocked(FILE *stream) {
+//     return ferror(stream);
+// }
 
 /* Implementation for readlinkat since Zephyr doesn't provide it */
 #ifndef readlinkat
@@ -483,50 +483,50 @@ inline FILE *open_memstream(char **ptr, size_t *sizeloc) {
 /* Locale-related definitions for Zephyr */
 #ifndef locale_t
 /* Simple typedef for locale_t since Zephyr doesn't provide it */
-typedef void* locale_t;
+// typedef void* locale_t;
 #endif
 
 /* Locale functions stubs */
-static inline locale_t newlocale(int category_mask, const char *locale, locale_t base) {
-    (void)category_mask;
-    (void)locale;
-    (void)base;
-    errno = ENOSYS;
-    return NULL;
-}
+// static inline locale_t newlocale(int category_mask, const char *locale, locale_t base) {
+//     (void)category_mask;
+//     (void)locale;
+//     (void)base;
+//     errno = ENOSYS;
+//     return NULL;
+// }
 
-static inline void freelocale(locale_t locale) {
-    (void)locale;
-    /* No-op in Zephyr */
-}
+// static inline void freelocale(locale_t locale) {
+//     (void)locale;
+//     /* No-op in Zephyr */
+// }
 
-static inline double strtod_l(const char *nptr, char **endptr, locale_t loc) {
-    (void)loc;
-    return strtod(nptr, endptr);
-}
+// static inline double strtod_l(const char *nptr, char **endptr, locale_t loc) {
+//     (void)loc;
+//     return strtod(nptr, endptr);
+// }
 
 /* String comparison functions */
-static inline int strcasecmp(const char *s1, const char *s2) {
-    /* Simple case-insensitive comparison */
-    while (*s1 && *s2 && tolower(*s1) == tolower(*s2)) {
-        s1++;
-        s2++;
-    }
-    return tolower(*s1) - tolower(*s2);
-}
+// static inline int strcasecmp(const char *s1, const char *s2) {
+//     /* Simple case-insensitive comparison */
+//     while (*s1 && *s2 && tolower(*s1) == tolower(*s2)) {
+//         s1++;
+//         s2++;
+//     }
+//     return tolower(*s1) - tolower(*s2);
+// }
 
-static inline int strncasecmp(const char *s1, const char *s2, size_t n) {
-    /* Simple case-insensitive comparison with limit */
-    while (n > 0 && *s1 && *s2 && tolower(*s1) == tolower(*s2)) {
-        s1++;
-        s2++;
-        n--;
-    }
-    if (n == 0) {
-        return 0;
-    }
-    return tolower(*s1) - tolower(*s2);
-}
+// static inline int strncasecmp(const char *s1, const char *s2, size_t n) {
+//     /* Simple case-insensitive comparison with limit */
+//     while (n > 0 && *s1 && *s2 && tolower(*s1) == tolower(*s2)) {
+//         s1++;
+//         s2++;
+//         n--;
+//     }
+//     if (n == 0) {
+//         return 0;
+//     }
+//     return tolower(*s1) - tolower(*s2);
+// }
 
 /* Process-related functions */
 static inline uid_t geteuid(void) {

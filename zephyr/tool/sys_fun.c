@@ -32,7 +32,7 @@ int getuid(void)
 #include <stdio.h>
 
 /* Define nfds_t type for Zephyr compatibility */
-typedef unsigned long nfds_t;
+// typedef unsigned long nfds_t;
 #ifdef __ZEPHYR__
 #include <zephyr/net/net_ip.h>
 #else
