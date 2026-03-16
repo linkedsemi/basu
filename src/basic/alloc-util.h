@@ -63,12 +63,12 @@ _malloc_  _alloc_(2, 1) static inline void *malloc_multiply(size_t size, size_t 
 }
 
 #if !HAVE_REALLOCARRAY
-_alloc_(2, 3) static inline void *reallocarray(void *p, size_t need, size_t size) {
-        if (size_multiply_overflow(size, need))
-                return NULL;
+// _alloc_(2, 3) static inline void *reallocarray(void *p, size_t need, size_t size) {
+//         if (size_multiply_overflow(size, need))
+//                 return NULL;
 
-        return realloc(p, size * need);
-}
+//         return realloc(p, size * need);
+// }
 #endif
 
 _alloc_(2, 3) static inline void *memdup_multiply(const void *p, size_t size, size_t need) {
