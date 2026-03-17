@@ -25,6 +25,12 @@ typedef struct sd_bus_vtable sd_bus_vtable;
 
 #include "sd-bus.h"
 
+/* Fix for SD_BUS_VTABLE_DEPRECATED being defined as empty string or string literal */
+#ifdef SD_BUS_VTABLE_DEPRECATED
+  #undef SD_BUS_VTABLE_DEPRECATED
+#endif
+
+/* Undefine before enum definition to avoid macro expansion in enum */
 enum {
         _SD_BUS_VTABLE_START             = '<',
         _SD_BUS_VTABLE_END               = '>',
@@ -45,6 +51,9 @@ enum {
         SD_BUS_VTABLE_PROPERTY_EXPLICIT            = 1ULL << 7,
         _SD_BUS_VTABLE_CAPABILITY_MASK             = 0xFFFFULL << 40
 };
+
+/* Re-define after enum to maintain macro compatibility */
+#define SD_BUS_VTABLE_DEPRECATED (1ULL << 0)
 
 #define SD_BUS_VTABLE_CAPABILITY(x) ((uint64_t) (((x)+1) & 0xFFFF) << 40)
 

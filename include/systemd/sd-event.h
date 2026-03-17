@@ -13,7 +13,7 @@
 #ifndef SD_EVENT_H
 #define SD_EVENT_H
 
-// #include <zephyr/kernel.h>
+#include <zephyr/kernel.h>
 // #include <zephyr/sys/atomic.h>
 // #include <zephyr/sys/dlist.h>
 // #include <zephyr/sys/ring_buffer.h>
@@ -21,20 +21,40 @@
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
-// #include <signal.h>
-// #include <sys/types.h>
-// #include <time.h>
 #include <signal.h>
+#include <zephyr/types.h>
+#include <time.h>
 
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+// struct signalfd_siginfo {
+// 	uint32_t ssi_signo;    /* Signal number */
+// 	int32_t ssi_errno;     /* Error number (unused) */
+// 	int32_t ssi_code;      /* Signal code */
+// 	uint32_t ssi_pid;      /* PID of sender */
+// 	uint32_t ssi_uid;      /* Real UID of sender */
+// 	int32_t ssi_fd;        /* File descriptor (SIGIO) */
+// 	uint32_t ssi_tid;      /* Kernel timer ID (POSIX timers) */
+// 	uint32_t ssi_band;     /* Band event (SIGIO) */
+// 	uint32_t ssi_overrun;  /* POSIX timer overrun count */
+// 	uint32_t ssi_trapno;   /* Trap number that caused signal */
+// 	int32_t ssi_status;    /* Exit status or signal (SIGCHLD) */
+// 	int32_t ssi_int;       /* Integer sent by sigqueue(2) */
+// 	void *ssi_ptr;         /* Pointer sent by sigqueue(2) */
+// 	uint64_t ssi_utime;    /* User CPU time consumed (SIGCHLD) */
+// 	uint64_t ssi_stime;    /* System CPU time consumed (SIGCHLD) */
+// 	uint64_t ssi_addr;     /* Address that generated signal (for hardware-generated signals) */
+// 	uint8_t ssi_pad[32];   /* Pad size to 128 bytes (allow for future fields) */
+// };
 
 /* Opaque types */
 typedef struct sd_event sd_event;
 typedef struct sd_event_source sd_event_source;
+typedef struct signalfd_siginfo sd_signal_info;
+typedef struct DispatchContext DispatchContext;  /* Forward declaration for dispatch context */
 
 /* Handler function types */
 typedef int (*sd_event_io_handler_t)(sd_event_source *s, int fd,
@@ -66,6 +86,15 @@ enum sd_event_enabled {
     SD_EVENT_OFF = 0,
     SD_EVENT_ON = 1,
     SD_EVENT_ONESHOT = 2,
+};
+
+/* Event loop states */
+enum sd_event_state {
+    SD_EVENT_STATE_PASSIVE = 0,
+    SD_EVENT_STATE_RUNNING = 1,
+    SD_EVENT_STATE_PREPARING = 2,
+    SD_EVENT_STATE_ARMED = 3,
+    SD_EVENT_STATE_EXITING = 4,
 };
 
 /* IO events (matching POSIX poll) */
@@ -189,6 +218,31 @@ int sd_event_get_watchdog(sd_event *event);
  * @return 0 on success, negative errno on error
  */
 int sd_event_set_watchdog(sd_event *event, int b);
+
+/**
+ * @brief Get the file descriptor associated with the event loop
+ * @param event Event loop
+ * @return File descriptor on success, negative errno on error
+ */
+int sd_event_get_fd(sd_event *event);
+
+/**
+ * @brief Get the current state of the event loop
+ * @param event Event loop
+ * @return Current state (SD_EVENT_STATE_PASSIVE/ARMED/PREPARING/RUNNING/EXITING)
+ */
+int sd_event_get_state(sd_event *event);
+
+/**
+ * @brief Set the dispatch context for the event loop
+ * @param event Event loop
+ * @param dispatch External dispatch context to use (NULL to use internal)
+ * @return 0 on success, negative errno on error
+ * 
+ * This allows sharing a dispatch context with other components (e.g., dbus-broker)
+ * to avoid conflicts and improve performance.
+ */
+int sd_event_set_dispatch_context(sd_event *event, DispatchContext *dispatch);
 
 /* ============================================================
  * Event Source Creation
@@ -427,6 +481,13 @@ int sd_event_source_set_destroy_callback(sd_event_source *source,
  */
 int sd_event_source_get_destroy_callback(sd_event_source *source,
                                           sd_event_destroy_t *callback);
+
+/**
+ * @brief Get event from source
+ * @param source Event source
+ * @return Event loop pointer
+ */
+sd_event* sd_event_source_get_event(sd_event_source *source);
 
 /* ============================================================
  * IO Source Specific

@@ -14,6 +14,13 @@ zephyr_library_include_directories(${BASU_SOURCE_DIR}/libsystemd/sd-bus)
 zephyr_library_include_directories(${BASU_SOURCE_DIR}/libsystemd/sd-daemon)
 zephyr_library_include_directories(${BASU_SOURCE_DIR}/systemd)
 zephyr_library_include_directories(${BASU_DIR}/include/systemd)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/src)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libclist-3/src)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libcstdaux-1/src)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libcrbtree-3/src)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libcdvar-1/src)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libcutf8-1/src)
+
 
 # Add Zephyr compatibility sources
 zephyr_library_sources(
@@ -102,3 +109,7 @@ zephyr_library_sources(
   )
 
 zephyr_include_directories(${BASU_DIR}/include)
+
+# Link dbus_broker library for dispatch_context support
+# Note: This creates a circular dependency, so we use INTERFACE to avoid it
+target_link_libraries(basu INTERFACE dbus_broker)

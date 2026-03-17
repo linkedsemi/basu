@@ -15,6 +15,9 @@ zephyr_include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-id128
   ${CMAKE_CURRENT_SOURCE_DIR}/src/systemd
   ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libclist-3/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libcstdaux-1/src
 )
 
 zephyr_library_compile_definitions(
@@ -28,7 +31,6 @@ zephyr_library_compile_definitions(
   _POSIX_C_SOURCE=200809L
   _XOPEN_SOURCE=700
   _DEFAULT_SOURCE
-  SD_BUS_VTABLE_DEPRECATED=1ULL<<0
 )
 
 # ---- shims & tool glue----
@@ -123,6 +125,15 @@ zephyr_library_sources(
 # ===== sd-daemon =====
 zephyr_library_sources(
   src/libsystemd/sd-daemon/sd-daemon.c
+)
+
+# ===== sd-event =====
+zephyr_library_include_directories(
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-event
+)
+
+zephyr_library_sources(
+  src/libsystemd/sd-event/sd-event.c
 )
 
 target_compile_options(basu PRIVATE

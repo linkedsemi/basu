@@ -14,7 +14,25 @@
 #include <zephyr/sys/heap_listener.h>
 #include <zephyr/logging/log.h>
 
-//LOG_MODULE_REGISTER(sd_event, CONFIG_SD_EVENT_LOG_LEVEL);
+#include <zephyr/kernel.h>
+#include <zephyr/posix/poll.h>
+#include <zephyr/posix/time.h>
+#include <zephyr/sys/timeutil.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/sys/dlist.h>
+
+// Include dispatch context from dbus-broker
+#include <util/dispatch.h>
+
+// Local clist implementation
+// #include "clist.h"
+
+#ifdef __ZEPHYR__
+#ifndef CONFIG_SD_EVENT_LOG_LEVEL
+#define CONFIG_SD_EVENT_LOG_LEVEL LOG_LEVEL_DBG
+#endif
+LOG_MODULE_REGISTER(sd_event, CONFIG_SD_EVENT_LOG_LEVEL);
+#endif
 
 /* Maximum number of event sources per event loop */
 #ifndef CONFIG_SD_EVENT_MAX_SOURCES
@@ -26,15 +44,19 @@
 #define CONFIG_SD_EVENT_MAX_IO_SOURCES 16
 #endif
 
+/* Default accuracy for timers */
+#ifndef DEFAULT_ACCURACY_USEC
+#define DEFAULT_ACCURACY_USEC (250 * USEC_PER_MSEC)
+#endif
+
 /* Default priority for event sources */
 #define SD_EVENT_DEFAULT_PRIORITY 0
 
 /* ============================================================
  * Internal Structures
  * ============================================================ */
-
 struct sd_event_source {
-    sys_dnode_t node;
+    CList link;                      /* For source lists */
 
     enum sd_event_source_type type;
     enum sd_event_enabled enabled;
@@ -50,6 +72,9 @@ struct sd_event_source {
 
     sd_event_handler_t prepare_callback;
 
+    /* For IO sources - integrated with dispatch_context */
+    DispatchFile dispatch_file;      /* Must be first for IO sources */
+    
     /* Type-specific data */
     union {
         struct {
@@ -65,6 +90,9 @@ struct sd_event_source {
             uint64_t usec;
             uint64_t accuracy;
             sd_event_time_handler_t handler;
+            int notify_pipe[2];      /* Notification pipe for timer */
+            struct k_work_delayable work;  /* Delayed work for timer */
+            bool expired;
         } time;
 
         struct {
@@ -99,7 +127,13 @@ struct sd_event_source {
 };
 
 struct sd_event {
-    sys_dlist_t sources;
+    DispatchContext dispatch;        /* Core dispatch context from dbus-broker */
+    CList sources;                   /* All event sources linked list */
+    CList timer_sources;             /* Timer sources (non-IO) */
+    CList defer_sources;             /* Deferred sources */
+    CList signal_sources;            /* Signal sources */
+    CList exit_sources;              /* Exit sources */
+    
     atomic_t ref_count;
 
     bool exit_requested;
@@ -111,6 +145,7 @@ struct sd_event {
 
     /* For wait/dispatch */
     bool prepared;
+    int last_timeout;                /* Last timeout used in poll */
 
     /* Default event loop */
     struct sd_event *default_event;
@@ -140,6 +175,19 @@ static uint64_t get_time_usec(int clock_id)
     return k_ticks_to_usec(k_uptime_ticks());
 }
 
+/* Zephyr-specific time conversion */
+static uint64_t clock_gettime_monotonic_us(void)
+{
+    return k_uptime_get() * USEC_PER_MSEC;
+}
+
+/* Zephyr poll wrapper for dispatch_context */
+static int zephyr_event_poll(DispatchContext *ctx, int timeout)
+{
+    /* Use the existing dispatch_context_poll which already handles Zephyr */
+    return dispatch_context_poll(ctx, timeout);
+}
+
 static int event_lock(sd_event *event)
 {
     if (!event) {
@@ -164,48 +212,63 @@ static int event_unlock(sd_event *event)
 
 sd_event_source *sd_event_source_ref(sd_event_source *source)
 {
-    // if (!source) {
-    //     return NULL;
-    // }
-    // atomic_inc(&source->ref_count);
-    // return source;
-    return NULL;
+    if (!source) {
+        return NULL;
+    }
+    atomic_inc(&source->ref_count);
+    return source;
 }
 
 sd_event_source *sd_event_source_unref(sd_event_source *source)
 {
-    // if (!source) {
-    //     return NULL;
-    // }
+    if (!source) {
+        return NULL;
+    }
 
-    // if (atomic_dec(&source->ref_count) == 1) {
-    //     /* Last reference, cleanup */
-    //     if (source->destroy_callback) {
-    //         source->destroy_callback(source->userdata);
-    //     }
+    if (atomic_dec(&source->ref_count) == 1) {
+        /* Last reference, cleanup */
+        if (source->destroy_callback) {
+            source->destroy_callback(source->userdata);
+        }
 
-    //     if (source->event) {
-    //         event_lock(source->event);
-    //         sys_dlist_remove(&source->node);
-    //         event_unlock(source->event);
-    //     }
+        if (source->event) {
+            event_lock(source->event);
+            
+            /* Unlink from appropriate list based on type */
+            c_list_unlink(&source->link);
+            
+            /* For IO sources, deinit dispatch_file */
+            if (source->type == SOURCE_IO) {
+                dispatch_file_deinit(&source->dispatch_file);
+            }
+            
+            event_unlock(source->event);
+        }
 
-    //     k_free(source->description);
+        k_free(source->description);
 
-    //     /* Type-specific cleanup */
-    //     switch (source->type) {
-    //     case SOURCE_TIME:
-    //         k_timer_stop(&source->data.time.timer);
-    //         break;
-    //     case SOURCE_SIGNAL:
-    //         /* Nothing to cleanup for poll signal */
-    //         break;
-    //     default:
-    //         break;
-    //     }
+        /* Type-specific cleanup */
+        switch (source->type) {
+        case SOURCE_TIME:
+            k_work_cancel_delayable(&source->data.time.work);
+            /* Close notification pipes if they exist */
+            if (source->data.time.notify_pipe[0] >= 0) {
+                close(source->data.time.notify_pipe[0]);
+                close(source->data.time.notify_pipe[1]);
+            }
+            break;
+        case SOURCE_SIGNAL:
+            /* Nothing to cleanup for poll signal */
+            break;
+        case SOURCE_IO:
+            /* dispatch_file already cleaned up above */
+            break;
+        default:
+            break;
+        }
 
-    //     k_free(source);
-    // }
+        free(source);  // Use free() to match calloc()
+    }
 
     return NULL;
 }
@@ -216,102 +279,131 @@ sd_event_source *sd_event_source_unref(sd_event_source *source)
 
 int sd_event_new(sd_event **event)
 {
-    // if (!event) {
-    //     return -EINVAL;
-    // }
+    if (!event) {
+        return -EINVAL;
+    }
 
-    // sd_event *e = k_calloc(1, sizeof(sd_event));
-    // if (!e) {
-    //     return -ENOMEM;
-    // }
+    sd_event *e = calloc(1, sizeof(sd_event));
+    if (!e) {
+        return -ENOMEM;
+    }
 
-    // sys_dlist_init(&e->sources);
-    // atomic_set(&e->ref_count, 1);
-    // e->exit_requested = false;
-    // e->exit_code = 0;
-    // e->watchdog_enabled = false;
-    // e->prepared = false;
+    /* Initialize dispatch context */
+    int r = dispatch_context_init(&e->dispatch);
+    if (r < 0) {
+        free(e);
+        return r;
+    }
 
-    // k_mutex_init(&e->lock);
+    /* Initialize source lists */
+    e->sources = (CList)C_LIST_INIT(e->sources);
+    e->timer_sources = (CList)C_LIST_INIT(e->timer_sources);
+    e->defer_sources = (CList)C_LIST_INIT(e->defer_sources);
+    e->signal_sources = (CList)C_LIST_INIT(e->signal_sources);
+    e->exit_sources = (CList)C_LIST_INIT(e->exit_sources);
+    
+    atomic_set(&e->ref_count, 1);
+    e->exit_requested = false;
+    e->exit_code = 0;
+    e->watchdog_enabled = false;
+    e->prepared = false;
+    e->last_timeout = -1;
 
-    // *event = e;
-    // LOG_DBG("Created new event loop %p", e);
+    k_mutex_init(&e->lock);
+
+    *event = e;
+
     return 0;
 }
 
 int sd_event_default(sd_event **event)
 {
-    // if (!event) {
-    //     return -EINVAL;
-    // }
+    if (!event) {
+        return -EINVAL;
+    }
 
-    // k_mutex_lock(&default_event_mutex, K_FOREVER);
+    k_mutex_lock(&default_event_mutex, K_FOREVER);
 
-    // if (!default_event_loop) {
-    //     int ret = sd_event_new(&default_event_loop);
-    //     if (ret < 0) {
-    //         k_mutex_unlock(&default_event_mutex);
-    //         return ret;
-    //     }
-    // }
+    if (!default_event_loop) {
+        int ret = sd_event_new(&default_event_loop);
+        if (ret < 0) {
+            k_mutex_unlock(&default_event_mutex);
+            return ret;
+        }
+    }
 
-    // *event = sd_event_ref(default_event_loop);
-    // k_mutex_unlock(&default_event_mutex);
+    *event = sd_event_ref(default_event_loop);
+    k_mutex_unlock(&default_event_mutex);
 
     return 0;
 }
 
 sd_event *sd_event_ref(sd_event *event)
 {
-    // if (!event) {
-    //     return NULL;
-    // }
-    // atomic_inc(&event->ref_count);
+    if (!event) {
+        return NULL;
+    }
+    atomic_inc(&event->ref_count);
     return event;
 }
 
 sd_event *sd_event_unref(sd_event *event)
 {
-    // if (!event) {
-    //     return NULL;
-    // }
+    if (!event) {
+        return NULL;
+    }
 
-    // if (atomic_dec(&event->ref_count) == 1) {
-    //     /* Remove from default if needed */
-    //     k_mutex_lock(&default_event_mutex, K_FOREVER);
-    //     if (event == default_event_loop) {
-    //         default_event_loop = NULL;
-    //     }
-    //     k_mutex_unlock(&default_event_mutex);
+    if (atomic_dec(&event->ref_count) == 1) {
+        /* Remove from default if needed */
+        k_mutex_lock(&default_event_mutex, K_FOREVER);
+        if (event == default_event_loop) {
+            default_event_loop = NULL;
+        }
+        k_mutex_unlock(&default_event_mutex);
 
-    //     /* Cleanup all sources */
-    //     event_lock(event);
-    //     sd_event_source *source, *next;
-    //     SYS_DLIST_FOR_EACH_CONTAINER_SAFE(&event->sources, source, next, node) {
-    //         source->event = NULL; /* Prevent double removal */
-    //         sd_event_source_unref(source);
-    //     }
-    //     event_unlock(event);
+        /* Cleanup all sources */
+        event_lock(event);
+        
+        /* Use CList iteration to cleanup all sources */
+        CList *iter, *safe;
+        c_list_for_each_safe(iter, safe, &event->sources) {
+            sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+            
+            /* First unlink the source */
+            c_list_unlink(&source->link);
+            
+            /* Then unref - the source will clean itself up */
+            sd_event_source_unref(source);
+        }
+        
+        event_unlock(event);
 
-    //     k_free(event);
-    //     LOG_DBG("Destroyed event loop %p", event);
-    // }
+        /* Deinitialize dispatch context */
+        dispatch_context_deinit(&event->dispatch);
+
+        free(event);  // Use free() to match calloc()
+    } else {
+        /* Reference count still in use, don't free */
+    }
 
     return NULL;
 }
 
 int sd_event_exit(sd_event *event, int code)
 {
-    // if (!event) {
-    //     return -EINVAL;
-    // }
+    if (!event) {
+        return -EINVAL;
+    }
 
-    // event_lock(event);
-    // event->exit_requested = true;
-    // event->exit_code = code;
-    // event_unlock(event);
+    event_lock(event);
+    event->exit_requested = true;
+    event->exit_code = code;
+    
+    /* Wake up the poll thread by writing to terminate_pipe */
+    dispatch_context_terminate(&event->dispatch);
+    
+    event_unlock(event);
 
-    // LOG_DBG("Event loop %p exit requested with code %d", event, code);
     return 0;
 }
 
@@ -360,6 +452,39 @@ int sd_event_set_watchdog(sd_event *event, int b)
     return 0;
 }
 
+int sd_event_get_fd(sd_event *event)
+{
+    if (!event) {
+        return -EINVAL;
+    }
+    
+    /* 
+     * Return the read end of the terminate pipe.
+     * This FD can be used to monitor the event loop from external poll/epoll.
+     * When events are pending, this FD will be readable.
+     */
+    return event->dispatch.terminate_pipe[0];
+}
+
+int sd_event_get_state(sd_event *event)
+{
+    if (!event) {
+        return -EINVAL;
+    }
+    
+    /* Map internal state to systemd-compatible state values */
+    if (event->exit_requested) {
+        return SD_EVENT_STATE_EXITING;
+    }
+    
+    if (event->prepared) {
+        return SD_EVENT_STATE_PREPARING;
+    }
+    
+    /* When waiting in sd_event_wait, we're in ARMED state */
+    return SD_EVENT_STATE_ARMED;
+}
+
 int sd_event_now(sd_event *event, int clock, uint64_t *usec)
 {
     // (void)event;
@@ -372,25 +497,94 @@ int sd_event_now(sd_event *event, int clock, uint64_t *usec)
     return 0;
 }
 
+/**
+ * @brief Set the dispatch context for the event loop
+ * @param event Event loop
+ * @param dispatch External dispatch context to use (NULL to use internal)
+ * @return 0 on success, negative errno on error
+ * 
+ * This allows sharing a dispatch context with other components (e.g., dbus-broker)
+ * to avoid conflicts and improve performance.
+ */
+int sd_event_set_dispatch_context(sd_event *event, DispatchContext *dispatch)
+{
+    if (!event) {
+        return -EINVAL;
+    }
+    
+    /* If dispatch is NULL, use internal dispatch context */
+    if (!dispatch) {
+        /* Already using internal dispatch */
+        return 0;
+    }
+    
+    /* 
+     * For now, we just store the pointer.
+     * In a full implementation, you would need to:
+     * 1. Deinitialize the internal dispatch context
+     * 2. Use the external one for all operations
+     */
+    // event->dispatch = *dispatch;  // Copy or reference?
+    
+#ifdef __ZEPHYR__
+    LOG_DBG("Event loop %p configured to use external dispatch context %p", 
+            event, dispatch);
+#endif
+    return 0;
+}
+
 /* ============================================================
- * Timer Callback Handler
+ * Timer Callback Handler with Notification Pipe
  * ============================================================ */
 
 static void timer_expiry_handler(struct k_timer *timer)
 {
     sd_event_source *source = CONTAINER_OF(timer, sd_event_source, data.time.timer);
 
+    if (!source || !source->event) {
+        return;
+    }
+
     if (source->enabled == SD_EVENT_OFF) {
         return;
     }
 
     source->pending = true;
+    source->data.time.expired = true;
 
     if (source->enabled == SD_EVENT_ONESHOT) {
         source->enabled = SD_EVENT_OFF;
     }
 
-    //LOG_DBG("Timer source %p expired", source);
+    /* Write to notification pipe to wake up poll */
+    if (source->data.time.notify_pipe[1] >= 0) {
+        char byte = 1;
+        ssize_t ret = write(source->data.time.notify_pipe[1], &byte, 1);
+    }
+}
+
+static void timer_work_handler(struct k_work *work)
+{
+    struct k_work_delayable *work_delayable = CONTAINER_OF(work, struct k_work_delayable, work);
+    sd_event_source *source = CONTAINER_OF(work_delayable, sd_event_source, data.time.work);
+    
+    if (source->enabled == SD_EVENT_OFF) {
+        return;
+    }
+    
+    /* Mark as pending */
+    source->pending = true;
+    source->data.time.expired = true;
+    
+    if (source->enabled == SD_EVENT_ONESHOT) {
+        source->enabled = SD_EVENT_OFF;
+    }
+
+    /* Write to notification pipe to wake up poll */
+    if (source->data.time.notify_pipe[1] >= 0) {
+        char byte = 1;
+        ssize_t ret = write(source->data.time.notify_pipe[1], &byte, 1);
+    }
 }
 
 /* ============================================================
@@ -412,8 +606,6 @@ static void defer_work_handler(struct k_work *work)
     if (source->enabled == SD_EVENT_ONESHOT) {
         source->enabled = SD_EVENT_OFF;
     }
-
-    //LOG_DBG("Defer source %p handled", source);
 }
 
 static void post_work_handler(struct k_work *work)
@@ -431,8 +623,6 @@ static void post_work_handler(struct k_work *work)
     if (source->enabled == SD_EVENT_ONESHOT) {
         source->enabled = SD_EVENT_OFF;
     }
-
-    //LOG_DBG("Post source %p handled", source);
 }
 
 static void exit_work_handler(struct k_work *work)
@@ -450,17 +640,29 @@ static void exit_work_handler(struct k_work *work)
     if (source->enabled == SD_EVENT_ONESHOT) {
         source->enabled = SD_EVENT_OFF;
     }
-
-    //LOG_DBG("Exit source %p handled", source);
 }
 
 /* ============================================================
- * Event Source Creation
+ * Event Source Creation Helpers
  * ============================================================ */
+
+static void source_insert_sorted(sd_event *event, sd_event_source *source) {
+    CList *i;
+    
+    /* Insert source in priority order (lower number = higher priority) */
+    c_list_for_each(i, &event->sources) {
+        sd_event_source *other = c_list_entry(i, sd_event_source, link);
+        if (other->priority >= source->priority) {
+            c_list_link_before(&other->link, &source->link);
+            return;
+        }
+    }
+    c_list_link_tail(&event->sources, &source->link);
+}
 
 static sd_event_source *source_new(sd_event *event, enum sd_event_source_type type)
 {
-    sd_event_source *source = k_calloc(1, sizeof(sd_event_source));
+    sd_event_source *source = calloc(1, sizeof(sd_event_source));
     if (!source) {
         return NULL;
     }
@@ -472,38 +674,76 @@ static sd_event_source *source_new(sd_event *event, enum sd_event_source_type ty
     source->floating = false;
     source->pending = false;
     atomic_set(&source->ref_count, 1);
+    
+    /* Initialize the link */
+    source->link = (CList)C_LIST_INIT(source->link);
 
-    sys_dlist_append(&event->sources, &source->node);
+    /* Only IO sources go into the main sources list for prepare callbacks */
+    if (type == SOURCE_IO) {
+        /* Insert into sorted list by priority */
+        source_insert_sorted(event, source);
+    }
 
     return source;
+}
+
+/* IO handler wrapper for dispatch_context */
+static int io_dispatch_wrapper(DispatchFile *file) {
+    sd_event_source *source = CONTAINER_OF(file, sd_event_source, dispatch_file);
+    
+    if (!source || !source->data.io.handler) {
+        return 0;
+    }
+    
+    int ret = source->data.io.handler(source, 
+                                 source->data.io.fd,
+                                 file->events & file->user_mask,
+                                 source->userdata);
+    
+    /* Clear events after handling */
+    dispatch_file_clear(file, file->events);
+    
+    return ret;
 }
 
 int sd_event_add_io(sd_event *event, sd_event_source **source,
                     int fd, uint32_t events,
                     sd_event_io_handler_t callback, void *userdata)
 {
-    // if (!event || !source || fd < 0 || !callback) {
-    //     return -EINVAL;
-    // }
+    if (!event || !source || fd < 0 || !callback) {
+        return -EINVAL;
+    }
 
-    // event_lock(event);
+    event_lock(event);
 
-    // sd_event_source *s = source_new(event, SOURCE_IO);
-    // if (!s) {
-    //     event_unlock(event);
-    //     return -ENOMEM;
-    // }
+    sd_event_source *s = source_new(event, SOURCE_IO);
+    if (!s) {
+        event_unlock(event);
+        return -ENOMEM;
+    }
 
-    // s->data.io.fd = fd;
-    // s->data.io.events = events;
-    // s->data.io.revents = 0;
-    // s->data.io.handler = callback;
-    // s->userdata = userdata;
+    s->data.io.fd = fd;
+    s->data.io.events = events;
+    s->data.io.revents = 0;
+    s->data.io.handler = callback;
+    s->userdata = userdata;
 
-    // *source = s;
-    // event_unlock(event);
+    /* Initialize dispatch_file and register with dispatch_context */
+    int r = dispatch_file_init(&s->dispatch_file,
+                               &event->dispatch,
+                               io_dispatch_wrapper,
+                               fd,
+                               events,
+                               0);
+    if (r < 0) {
+        k_free(s);
+        event_unlock(event);
+        return r;
+    }
 
-    // LOG_DBG("Added IO source %p (fd=%d, events=0x%x)", s, fd, events);
+    *source = s;
+    event_unlock(event);
+
     return 0;
 }
 
@@ -511,38 +751,60 @@ int sd_event_add_time(sd_event *event, sd_event_source **source,
                       int clock, uint64_t usec, uint64_t accuracy,
                       sd_event_time_handler_t callback, void *userdata)
 {
-    // if (!event || !source || !callback) {
-    //     return -EINVAL;
-    // }
+    if (!event || !source || !callback) {
+        return -EINVAL;
+    }
 
-    // event_lock(event);
+    event_lock(event);
 
-    // sd_event_source *s = source_new(event, SOURCE_TIME);
-    // if (!s) {
-    //     event_unlock(event);
-    //     return -ENOMEM;
-    // }
+    sd_event_source *s = source_new(event, SOURCE_TIME);
+    if (!s) {
+        event_unlock(event);
+        return -ENOMEM;
+    }
 
-    // s->data.time.clock = clock;
-    // s->data.time.usec = usec;
-    // s->data.time.accuracy = accuracy;
-    // s->data.time.handler = callback;
-    // s->userdata = userdata;
+    s->data.time.clock = clock;
+    s->data.time.usec = usec;
+    s->data.time.accuracy = accuracy ? accuracy : DEFAULT_ACCURACY_USEC;
+    s->data.time.handler = callback;
+    s->userdata = userdata;
+    
+    /* Initialize notification pipe to invalid state first */
+    s->data.time.notify_pipe[0] = -1;
+    s->data.time.notify_pipe[1] = -1;
+    
+    /* Initialize notification pipe */
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, s->data.time.notify_pipe) < 0) {
+        k_free(s);
+        event_unlock(event);
+        return -errno;
+    }
 
-    // k_timer_init(&s->data.time.timer, timer_expiry_handler, NULL);
+    /* Set read end to non-blocking mode */
+    int flags = fcntl(s->data.time.notify_pipe[0], F_GETFL, 0);
+    if (flags >= 0) {
+        fcntl(s->data.time.notify_pipe[0], F_SETFL, flags | O_NONBLOCK);
+    }
 
-    // /* Calculate relative timeout */
-    // uint64_t now = get_time_usec(clock);
-    // uint64_t timeout = (usec > now) ? (usec - now) : 0;
+    /* Initialize delayed work for timer (runs in worker thread, not ISR) */
+    k_work_init_delayable(&s->data.time.work, timer_work_handler);
 
-    // k_timer_start(&s->data.time.timer,
-    //               K_USEC(timeout),
-    //               K_NO_WAIT); /* One-shot, will be rearmed in handler if needed */
+    /* Calculate absolute expiry time and relative timeout */
+    uint64_t now = clock_gettime_monotonic_us();
+    uint64_t absolute_expiry = now + usec;  /* usec is relative timeout */
+    uint64_t timeout = usec;
 
-    // *source = s;
-    // event_unlock(event);
+    /* Store absolute expiry time for later comparison */
+    s->data.time.usec = absolute_expiry;
 
-    // LOG_DBG("Added time source %p (usec=%llu)", s, usec);
+    k_work_schedule(&s->data.time.work, K_USEC(timeout));
+
+    /* Add to timer_sources list for processing */
+    c_list_link_tail(&event->timer_sources, &s->link);
+
+    *source = s;
+    event_unlock(event);
+
     return 0;
 }
 int sd_event_add_time_relative(sd_event *event, sd_event_source **source,
@@ -596,87 +858,131 @@ int sd_event_add_child(sd_event *event, sd_event_source **source,
     return -ENOTSUP;
 }
 
+static void defer_source_insert_sorted(sd_event *event, sd_event_source *source) {
+    CList *i;
+    
+    /* Insert source in priority order (lower number = higher priority) */
+    /* Higher priority sources (smaller numbers) should come FIRST */
+    /* For same priority, maintain FIFO order (append after all same-priority sources) */
+    c_list_for_each(i, &event->defer_sources) {
+        sd_event_source *other = c_list_entry(i, sd_event_source, link);
+        
+        /* Insert before the first source that has STRICTLY LOWER priority (larger number) */
+        /* Use <= to skip all sources with same or higher priority */
+        if (source->priority <= other->priority) {
+            /* Skip sources with same priority to maintain FIFO order */
+            if (source->priority == other->priority) {
+                continue;  /* Continue to find next different priority */
+            }
+            c_list_link_before(&other->link, &source->link);
+            goto done;
+        }
+    }
+    /* If all sources have higher or equal priority, append to tail */
+    c_list_link_tail(&event->defer_sources, &source->link);
+    
+done:
+    /* Print final list state */
+    CList *iter;
+    c_list_for_each(iter, &event->defer_sources) {
+        sd_event_source *src = c_list_entry(iter, sd_event_source, link);
+    }
+}
+
 int sd_event_add_defer(sd_event *event, sd_event_source **source,
                        sd_event_handler_t callback, void *userdata)
 {
-    // if (!event || !source || !callback) {
-    //     return -EINVAL;
-    // }
+    if (!event || !source || !callback) {
+        return -EINVAL;
+    }
 
-    // event_lock(event);
+    event_lock(event);
 
-    // sd_event_source *s = source_new(event, SOURCE_DEFER);
-    // if (!s) {
-    //     event_unlock(event);
-    //     return -ENOMEM;
-    // }
+    sd_event_source *s = source_new(event, SOURCE_DEFER);
+    if (!s) {
+        event_unlock(event);
+        return -ENOMEM;
+    }
 
-    // s->data.defer.handler = callback;
-    // s->userdata = userdata;
+    s->data.defer.handler = callback;
+    s->userdata = userdata;
 
-    // k_work_init(&s->data.defer.work, defer_work_handler);
+    k_work_init(&s->data.defer.work, defer_work_handler);
 
-    // /* Defer sources are oneshot by default */
-    // s->enabled = SD_EVENT_ONESHOT;
+    /* Defer sources are oneshot by default */
+    s->enabled = SD_EVENT_ONESHOT;
 
-    // *source = s;
-    // event_unlock(event);
+    /* Add to defer_sources list sorted by priority */
+    defer_source_insert_sorted(event, s);
 
-    // LOG_DBG("Added defer source %p", s);
+    *source = s;
+    
+    /* Print current list state in one line */
+    CList *iter;
+    c_list_for_each(iter, &event->defer_sources) {
+        sd_event_source *src = c_list_entry(iter, sd_event_source, link);
+    }
+    
+    event_unlock(event);
+
     return 0;
 }
 
 int sd_event_add_post(sd_event *event, sd_event_source **source,
                       sd_event_handler_t callback, void *userdata)
 {
-    // if (!event || !source || !callback) {
-    //     return -EINVAL;
-    // }
+    if (!event || !source || !callback) {
+        return -EINVAL;
+    }
 
-    // event_lock(event);
+    event_lock(event);
 
-    // sd_event_source *s = source_new(event, SOURCE_POST);
-    // if (!s) {
-    //     event_unlock(event);
-    //     return -ENOMEM;
-    // }
+    sd_event_source *s = source_new(event, SOURCE_POST);
+    if (!s) {
+        event_unlock(event);
+        return -ENOMEM;
+    }
 
-    // s->data.post.handler = callback;
-    // s->userdata = userdata;
+    s->data.post.handler = callback;
+    s->userdata = userdata;
 
-    // k_work_init(&s->data.post.work, post_work_handler);
+    k_work_init(&s->data.post.work, post_work_handler);
 
-    // *source = s;
-    // event_unlock(event);
+    *source = s;
+    event_unlock(event);
 
-    // LOG_DBG("Added post source %p", s);
     return 0;
 }
 
 int sd_event_add_exit(sd_event *event, sd_event_source **source,
                       sd_event_handler_t callback, void *userdata)
 {
-    // if (!event || !source || !callback) {
-    //     return -EINVAL;
-    // }
+    if (!event || !callback) {
+        printk("[sd-event] Invalid parameters: event=%p, callback=%p\n", (void*)event, (void*)callback);
+        return -EINVAL;
+    }
 
-    // event_lock(event);
+    event_lock(event);
 
-    // sd_event_source *s = source_new(event, SOURCE_EXIT);
-    // if (!s) {
-    //     event_unlock(event);
-    //     return -ENOMEM;
-    // }
+    sd_event_source *s = source_new(event, SOURCE_EXIT);
+    if (!s) {
+        event_unlock(event);
+        return -ENOMEM;
+    }
 
-    // s->data.exit.handler = callback;
-    // s->userdata = userdata;
+    s->data.exit.handler = callback;
+    s->userdata = userdata;
 
-    // k_work_init(&s->data.exit.work, exit_work_handler);
+    k_work_init(&s->data.exit.work, exit_work_handler);
 
-    // *source = s;
-    // event_unlock(event);
+    /* Add to exit_sources list */
+    c_list_link_tail(&event->exit_sources, &s->link);
 
-    // LOG_DBG("Added exit source %p", s);
+    if (source) {
+        *source = s;
+    }
+    event_unlock(event);
+
     return 0;
 }
 
@@ -694,13 +1000,12 @@ void *sd_event_source_get_userdata(sd_event_source *source)
 
 void *sd_event_source_set_userdata(sd_event_source *source, void *userdata)
 {
-    // if (!source) {
-    //     return NULL;
-    // }
-    // void *old = source->userdata;
-    // source->userdata = userdata;
-    // return old;
-    return NULL;
+    if (!source) {
+        return NULL;
+    }
+    void *old = source->userdata;
+    source->userdata = userdata;
+    return old;
 }
 
 int sd_event_source_get_description(sd_event_source *source, const char **description)
@@ -740,6 +1045,14 @@ int sd_event_source_set_prepare(sd_event_source *source, sd_event_handler_t call
     return 0;
 }
 
+sd_event* sd_event_source_get_event(sd_event_source *source)
+{
+    if (!source) {
+        return NULL;
+    }
+    return source->event;
+}
+
 int sd_event_source_get_pending(sd_event_source *source)
 {
     // if (!source) {
@@ -760,43 +1073,80 @@ int sd_event_source_get_priority(sd_event_source *source, int64_t *priority)
 
 int sd_event_source_set_priority(sd_event_source *source, int64_t priority)
 {
-    // if (!source) {
-    //     return -EINVAL;
-    // }
-    // source->priority = priority;
+    if (!source) {
+        return -EINVAL;
+    }
+    
+    /* If source is already in a list, we need to re-sort it */
+    if (c_list_is_linked(&source->link)) {
+        sd_event *event = source->event;
+        event_lock(event);
+        
+        /* Unlink from current position */
+        c_list_unlink(&source->link);
+        
+        /* Update priority */
+        source->priority = priority;
+        
+        /* Re-insert in sorted order */
+        /* Check which list this source belongs to by type */
+        if (source->type == SOURCE_DEFER) {
+            defer_source_insert_sorted(event, source);
+        } else {
+            source_insert_sorted(event, source);
+        }
+        
+        event_unlock(event);
+    } else {
+        /* Not linked yet, just set priority */
+        source->priority = priority;
+    }
+    
     return 0;
 }
 
 int sd_event_source_get_enabled(sd_event_source *source, int *enabled)
 {
-    // if (!source || !enabled) {
-    //     return -EINVAL;
-    // }
-    // *enabled = source->enabled;
+    if (!source || !enabled) {
+        return -EINVAL;
+    }
+    *enabled = source->enabled;
     return 0;
 }
 
 int sd_event_source_set_enabled(sd_event_source *source, int enabled)
 {
-    // if (!source) {
-    //     return -EINVAL;
-    // }
+    if (!source) {
+        return -EINVAL;
+    }
 
-    // if (enabled < SD_EVENT_OFF || enabled > SD_EVENT_ONESHOT) {
-    //     return -EINVAL;
-    // }
+    if (enabled < SD_EVENT_OFF || enabled > SD_EVENT_ONESHOT) {
+        return -EINVAL;
+    }
 
-    // source->enabled = enabled;
+    source->enabled = enabled;
 
-    // /* Handle timer restart for time sources */
-    // if (source->type == SOURCE_TIME && enabled == SD_EVENT_ON) {
-    //     uint64_t now = get_time_usec(source->data.time.clock);
-    //     uint64_t timeout = (source->data.time.usec > now) ?
-    //                        (source->data.time.usec - now) : 0;
-    //     k_timer_start(&source->data.time.timer,
-    //                   K_USEC(timeout),
-    //                   K_NO_WAIT);
-    // }
+    /* Handle timer restart for time sources */
+    if (source->type == SOURCE_TIME && enabled == SD_EVENT_ON) {
+        uint64_t now = clock_gettime_monotonic_us();
+        uint64_t timeout = (source->data.time.usec > now) ?
+                           (source->data.time.usec - now) : 0;
+        
+        k_timer_start(&source->data.time.timer,
+                      K_USEC(timeout),
+                      K_NO_WAIT);
+    }
+    
+    /* For IO sources, select/deselect events in dispatch_context */
+    if (source->type == SOURCE_IO) {
+        if (enabled == SD_EVENT_ON) {
+            /* Select events for monitoring */
+            dispatch_file_select(&source->dispatch_file, source->data.io.events);
+        } else if (enabled == SD_EVENT_OFF) {
+            /* Deselect all events */
+            dispatch_file_deselect(&source->dispatch_file, source->data.io.events);
+        }
+    }
 
     return 0;
 }
@@ -903,19 +1253,19 @@ int sd_event_source_get_time(sd_event_source *source, uint64_t *usec)
 
 int sd_event_source_set_time(sd_event_source *source, uint64_t usec)
 {
-    // if (!source || source->type != SOURCE_TIME) {
-    //     return -EINVAL;
-    // }
-    // source->data.time.usec = usec;
+    if (!source || source->type != SOURCE_TIME) {
+        return -EINVAL;
+    }
+    source->data.time.usec = usec;
 
-    // /* Restart timer with new time */
-    // if (source->enabled == SD_EVENT_ON) {
-    //     uint64_t now = get_time_usec(source->data.time.clock);
-    //     uint64_t timeout = (usec > now) ? (usec - now) : 0;
-    //     k_timer_start(&source->data.time.timer,
-    //                   K_USEC(timeout),
-    //                   K_NO_WAIT);
-    // }
+    /* Restart timer with new time */
+    if (source->enabled == SD_EVENT_ON) {
+        uint64_t now = clock_gettime_monotonic_us();
+        uint64_t timeout = (usec > now) ? (usec - now) : 0;
+        k_timer_start(&source->data.time.timer,
+                      K_USEC(timeout),
+                      K_NO_WAIT);
+    }
 
     return 0;
 }
@@ -968,246 +1318,287 @@ int sd_event_source_get_child_pid(sd_event_source *source, pid_t *pid)
  * Event Loop Iteration (Prepare/Wait/Dispatch)
  * ============================================================ */
 
+/**
+ * @brief Process timer sources and check for expired timers
+ */
+static void process_timer_sources(sd_event *event) {
+    CList *iter;
+    
+    // Check if list is empty
+    if (event->timer_sources.next == &event->timer_sources) {
+        return;
+    }
+    
+    c_list_for_each(iter, &event->timer_sources) {
+        sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+        
+        if (!source) {
+            continue;
+        }
+        
+        if (source->enabled == SD_EVENT_OFF) {
+            continue;
+        }
+        
+        /* Check if timer notification pipe has data */
+        char buffer[8];
+        ssize_t n = read(source->data.time.notify_pipe[0], buffer, sizeof(buffer));
+        
+        if (n > 0) {
+            source->pending = true;
+            
+            if (source->enabled == SD_EVENT_ONESHOT) {
+                source->enabled = SD_EVENT_OFF;
+            }
+        } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            /* Real error, not just "no data yet" */
+            // printk("[sd-event] Read error from notify_pipe[%d]: errno=%d\n", 
+            //        source->data.time.notify_pipe[0], errno);
+        } else {
+            /* n == 0 or (n < 0 && errno == EAGAIN/EWOULDBLOCK) */
+            /* Timer work handler hasn't written yet, not pending */
+            // printk("[sd-event] Timer not pending yet (no data in pipe)\n");
+        }
+    }
+}
+
+/**
+ * @brief Process deferred sources
+ */
+static void process_deferred_sources(sd_event *event) {
+    CList *iter, *safe;
+    
+    /* Mark all enabled deferred sources as pending */
+    c_list_for_each_safe(iter, safe, &event->defer_sources) {
+        sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+        
+        if (source->enabled == SD_EVENT_OFF) {
+            continue;
+        }
+        
+        /* Mark as pending for dispatch */
+        source->pending = true;
+    }
+}
+
 int sd_event_prepare(sd_event *event)
 {
-    // if (!event) {
-    //     return -EINVAL;
-    // }
+    if (!event) {
+        return -EINVAL;
+    }
 
-    // event_lock(event);
+    event_lock(event);
 
-    // /* Call prepare callbacks */
-    // sd_event_source *source;
-    // SYS_DLIST_FOR_EACH_CONTAINER(&event->sources, source, node) {
-    //     if (source->enabled != SD_EVENT_OFF && source->prepare_callback) {
-    //         source->prepare_callback(source, source->userdata);
-    //     }
-    // }
+    /* Call prepare callbacks for all sources */
+    CList *iter;
+    c_list_for_each(iter, &event->sources) {
+        sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+        
+        if (source->enabled != SD_EVENT_OFF && source->prepare_callback) {
+            source->prepare_callback(source, source->userdata);
+        }
+    }
 
-    // event->prepared = true;
-    // event_unlock(event);
+    /* Process timer sources */
+    process_timer_sources(event);
+    
+    /* Process deferred sources */
+    process_deferred_sources(event);
+
+    event->prepared = true;
+    event_unlock(event);
 
     return 0;
 }
 
 int sd_event_wait(sd_event *event, uint64_t usec)
 {
-    // if (!event) {
-    //     return -EINVAL;
-    // }
+    if (!event) {
+        return -EINVAL;
+    }
 
-    // event_lock(event);
+    event_lock(event);
 
-    // if (!event->prepared) {
-    //     event_unlock(event);
-    //     sd_event_prepare(event);
-    //     event_lock(event);
-    // }
+    if (!event->prepared) {
+        event_unlock(event);
+        int ret = sd_event_prepare(event);
+        if (ret < 0) {
+            LOG_ERR("sd_event_prepare failed: %d", ret);
+            return ret;
+        }
+        event_lock(event);
+    }
 
-    // /* Build poll array for IO sources */
-    // struct zsock_pollfd poll_fds[CONFIG_SD_EVENT_MAX_IO_SOURCES];
-    // sd_event_source *io_sources[CONFIG_SD_EVENT_MAX_IO_SOURCES];
-    // int num_io = 0;
+    /* Check if there are any pending non-IO sources (deferred, timers, etc.) */
+    bool has_pending = false;
+    
+    /* Check deferred sources */
+    CList *iter;
+    c_list_for_each(iter, &event->defer_sources) {
+        sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+        if (source->pending && source->enabled != SD_EVENT_OFF) {
+            has_pending = true;
+            break;
+        }
+    }
+    
+    /* Check timer sources */
+    if (!has_pending) {
+        c_list_for_each(iter, &event->timer_sources) {
+            sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+            if (source->pending && source->enabled != SD_EVENT_OFF) {
+                has_pending = true;
+                break;
+            }
+        }
+    }
 
-    // sd_event_source *source;
-    // SYS_DLIST_FOR_EACH_CONTAINER(&event->sources, source, node) {
-    //     if (source->type == SOURCE_IO && source->enabled != SD_EVENT_OFF) {
-    //         if (num_io >= CONFIG_SD_EVENT_MAX_IO_SOURCES) {
-    //             break;
-    //         }
+    /* Calculate the earliest timer timeout */
+    int64_t timer_timeout_ms = -1;
+    
+    if (!has_pending && usec == (uint64_t)-1) {
+        /* Only calculate timer timeout if user didn't specify a timeout */
+        uint64_t now = clock_gettime_monotonic_us();
+        
+        c_list_for_each(iter, &event->timer_sources) {
+            sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+            
+            if (source->enabled == SD_EVENT_OFF) {
+                continue;
+            }
+            
+            uint64_t target_usec = source->data.time.usec;
+            
+            if (target_usec > now) {
+                int64_t remaining_usec = (int64_t)(target_usec - now);
+                int64_t remaining_ms = remaining_usec / 1000;
+                
+                if (remaining_ms > 0 && (timer_timeout_ms < 0 || remaining_ms < timer_timeout_ms)) {
+                    timer_timeout_ms = (int)remaining_ms;
+                }
+            } else {
+                /* Timer already expired - should have been handled, but use small timeout to avoid blocking */
+                if (timer_timeout_ms < 0 || timer_timeout_ms > 1) {
+                    timer_timeout_ms = 1;  // Use 1ms timeout to avoid infinite blocking
+                }
+            }
+        }
+    }
 
-    //         poll_fds[num_io].fd = source->data.io.fd;
-    //         poll_fds[num_io].events = 0;
+    /* Calculate timeout */
+    int timeout_ms;
+    if (has_pending) {
+        /* If there are pending sources, don't block in poll */
+        timeout_ms = 0;
+    } else if (timer_timeout_ms >= 0) {
+        /* Use calculated timer timeout */
+        timeout_ms = (int)timer_timeout_ms;
+    } else if (usec == (uint64_t)-1) {
+        timeout_ms = -1; /* Infinite */
+    } else {
+        timeout_ms = (int)(usec / 1000);
+        if (timeout_ms < 0) {
+            timeout_ms = 0;
+        }
+    }
 
-    //         if (source->data.io.events & SD_EVENT_READABLE) {
-    //             poll_fds[num_io].events |= ZSOCK_POLLIN;
-    //         }
-    //         if (source->data.io.events & SD_EVENT_WRITABLE) {
-    //             poll_fds[num_io].events |= ZSOCK_POLLOUT;
-    //         }
+    event->last_timeout = timeout_ms;
+    event_unlock(event);
 
-    //         poll_fds[num_io].revents = 0;
-    //         io_sources[num_io] = source;
-    //         num_io++;
-    //     }
-    // }
-
-    // /* Check for pending timers and signals */
-    // bool has_pending = false;
-    // SYS_DLIST_FOR_EACH_CONTAINER(&event->sources, source, node) {
-    //     if (source->pending) {
-    //         has_pending = true;
-    //         break;
-    //     }
-    //     if (source->type == SOURCE_SIGNAL) {
-    //         int signaled = 0, result = 0;
-    //         k_poll_signal_check(&source->data.signal.signal, &signaled, &result);
-    //         if (signaled) {
-    //             source->pending = true;
-    //             has_pending = true;
-    //             break;
-    //         }
-    //     }
-    // }
-
-    // event_unlock(event);
-
-    // /* If we have pending events, don't wait */
-    // int timeout_ms = 0;
-    // if (!has_pending) {
-    //     if (usec == (uint64_t)-1) {
-    //         timeout_ms = -1; /* Infinite */
-    //     } else {
-    //         timeout_ms = (int)(usec / 1000);
-    //         if (timeout_ms < 0) timeout_ms = 0;
-    //     }
-    // }
-
-    // /* Poll IO sources */
-    // if (num_io > 0 && !has_pending) {
-    //     int ret = zsock_poll(poll_fds, num_io, timeout_ms);
-    //     if (ret > 0) {
-    //         event_lock(event);
-    //         for (int i = 0; i < num_io; i++) {
-    //             if (poll_fds[i].revents != 0) {
-    //                 io_sources[i]->data.io.revents = 0;
-    //                 if (poll_fds[i].revents & ZSOCK_POLLIN) {
-    //                     io_sources[i]->data.io.revents |= SD_EVENT_READABLE;
-    //                 }
-    //                 if (poll_fds[i].revents & ZSOCK_POLLOUT) {
-    //                     io_sources[i]->data.io.revents |= SD_EVENT_WRITABLE;
-    //                 }
-    //                 if (poll_fds[i].revents & ZSOCK_POLLERR) {
-    //                     io_sources[i]->data.io.revents |= SD_EVENT_ERROR;
-    //                 }
-    //                 if (poll_fds[i].revents & ZSOCK_POLLHUP) {
-    //                     io_sources[i]->data.io.revents |= SD_EVENT_HANGUP;
-    //                 }
-    //                 io_sources[i]->pending = true;
-    //             }
-    //         }
-    //         event_unlock(event);
-    //     }
-    // }
-
-    return 0;
+    /* Use dispatch_context_poll to wait for events */
+    int ret = dispatch_context_poll(&event->dispatch, timeout_ms);
+    
+    return ret;
 }
 
 int sd_event_dispatch(sd_event *event)
 {
-    // if (!event) {
-    //     return -EINVAL;
-    // }
+    if (!event) {
+        return -EINVAL;
+    }
 
-    // event_lock(event);
+    event_lock(event);
 
-    // /* Check for exit */
-    // if (event->exit_requested) {
-    //     event_unlock(event);
-    //     return 0;
-    // }
+    /* First, handle deferred sources (before checking exit) */
+    CList *iter, *safe;
+    
+    c_list_for_each_safe(iter, safe, &event->defer_sources) {
+        sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+        
+        if (!source->pending || source->enabled == SD_EVENT_OFF) {
+            continue;
+        }
 
-    // /* Process pending sources by priority */
-    // sd_event_source *source;
+        source->pending = false;
+        
+        if (source->data.defer.handler) {
+            event_unlock(event);
+            source->data.defer.handler(source, source->userdata);
+            event_lock(event);
+        }
+        
+        if (source->enabled == SD_EVENT_ONESHOT) {
+            source->enabled = SD_EVENT_OFF;
+        }
+    }
 
-    // /* First, handle exit sources */
-    // SYS_DLIST_FOR_EACH_CONTAINER(&event->sources, source, node) {
-    //     if (source->type == SOURCE_EXIT && source->pending &&
-    //         source->enabled != SD_EVENT_OFF) {
-    //         source->pending = false;
-    //         if (source->data.exit.handler) {
-    //             event_unlock(event);
-    //             source->data.exit.handler(source, source->userdata);
-    //             event_lock(event);
-    //         }
-    //     }
-    // }
+    /* Check for exit AFTER handling deferred sources */
+    if (event->exit_requested) {
+        event_unlock(event);
+        return 0;
+    }
 
-    // /* Handle other pending sources */
-    // SYS_DLIST_FOR_EACH_CONTAINER(&event->sources, source, node) {
-    //     if (!source->pending || source->enabled == SD_EVENT_OFF) {
-    //         continue;
-    //     }
+    /* Handle timer sources */
+    c_list_for_each_safe(iter, safe, &event->timer_sources) {
+        sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+        
+        if (!source || !source->data.time.handler) {
+            continue;
+        }
+        
+        if (!source->pending || source->enabled == SD_EVENT_OFF) {
+            continue;
+        }
 
-    //     source->pending = false;
+        source->pending = false;
+        
+        uint64_t now = clock_gettime_monotonic_us();
+        
+        event_unlock(event);
+        int ret = source->data.time.handler(source, now, source->userdata);
+        event_lock(event);
+        
+        if (source->enabled == SD_EVENT_ONESHOT) {
+            source->enabled = SD_EVENT_OFF;
+        }
+    }
 
-    //     switch (source->type) {
-    //     case SOURCE_IO:
-    //         if (source->data.io.handler) {
-    //             int fd = source->data.io.fd;
-    //             uint32_t revents = source->data.io.revents;
-    //             event_unlock(event);
-    //             source->data.io.handler(source, fd, revents, source->userdata);
-    //             event_lock(event);
-    //         }
-    //         if (source->enabled == SD_EVENT_ONESHOT) {
-    //             source->enabled = SD_EVENT_OFF;
-    //         }
-    //         break;
+    /* Dispatch IO sources via dispatch_context */
+    int ret = dispatch_context_dispatch(&event->dispatch);
+    
+    event->prepared = false;
+    event_unlock(event);
 
-    //     case SOURCE_TIME:
-    //         if (source->data.time.handler) {
-    //             uint64_t usec = get_time_usec(source->data.time.clock);
-    //             event_unlock(event);
-    //             source->data.time.handler(source, usec, source->userdata);
-    //             event_lock(event);
-    //         }
-    //         if (source->enabled == SD_EVENT_ONESHOT) {
-    //             source->enabled = SD_EVENT_OFF;
-    //         }
-    //         break;
-
-    //     case SOURCE_SIGNAL: {
-    //         int signaled = 0, result = 0;
-    //         k_poll_signal_check(&source->data.signal.signal, &signaled, &result);
-    //         if (signaled && source->data.signal.handler) {
-    //             // struct signalfd_siginfo si;
-    //             // si.ssi_signo = source->data.signal.sig;
-    //             // event_unlock(event);
-    //             // source->data.signal.handler(source, &si, source->userdata);
-    //             // event_lock(event);
-    //         }
-    //         k_poll_signal_reset(&source->data.signal.signal);
-    //         if (source->enabled == SD_EVENT_ONESHOT) {
-    //             source->enabled = SD_EVENT_OFF;
-    //         }
-    //         break;
-    //     }
-
-    //     case SOURCE_DEFER:
-    //         /* Defer sources use work queue, handled separately */
-    //         break;
-
-    //     case SOURCE_POST:
-    //         /* Post sources use work queue, handled separately */
-    //         break;
-
-    //     default:
-    //         break;
-    //     }
-    // }
-
-    // event->prepared = false;
-    // event_unlock(event);
-
-    return 0;
+    return ret;
 }
 
 int sd_event_run(sd_event *event, uint64_t usec)
 {
-    // int ret;
+    int ret;
 
-    // ret = sd_event_prepare(event);
-    // if (ret < 0) {
-    //     return ret;
-    // }
+    ret = sd_event_prepare(event);
+    if (ret < 0) {
+        return ret;
+    }
 
-    // ret = sd_event_wait(event, usec);
-    // if (ret < 0) {
-    //     return ret;
-    // }
+    ret = sd_event_wait(event, usec);
+    if (ret < 0) {
+        return ret;
+    }
 
-    return sd_event_dispatch(event);
+    ret = sd_event_dispatch(event);
+    
+    return ret;
 }
 
 int sd_event_loop(sd_event *event)
@@ -1216,12 +1607,31 @@ int sd_event_loop(sd_event *event)
         return -EINVAL;
     }
 
+    /* Execute at least one iteration to handle deferred sources */
+    bool first_iteration = true;
+    
     while (1) {
+        /* Check for exit, but only after first iteration completes */
         event_lock(event);
-        bool should_exit = event->exit_requested;
+        bool should_exit = event->exit_requested && !first_iteration;
         event_unlock(event);
 
         if (should_exit) {
+            CList *iter, *safe;
+            c_list_for_each_safe(iter, safe, &event->exit_sources) {
+                sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+                
+                if (source->enabled != SD_EVENT_OFF) {
+                    
+                    if (source->data.exit.handler) {
+                        source->data.exit.handler(source, source->userdata);
+                    }
+                    
+                    if (source->enabled == SD_EVENT_ONESHOT) {
+                        source->enabled = SD_EVENT_OFF;
+                    }
+                }
+            }
             break;
         }
 
@@ -1229,9 +1639,11 @@ int sd_event_loop(sd_event *event)
         if (ret < 0 && ret != -EINTR) {
             return ret;
         }
+        
+        first_iteration = false;
     }
 
-    return 0;
+    return event->exit_code;
 }
 
 /* ============================================================

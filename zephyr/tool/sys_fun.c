@@ -3,25 +3,6 @@
 //#include <termios.h>
 #endif
 
-
-int issetugid(void)
-{
-    return 0;
-}
-
-
-int geteuid(void)
-{
-    return 0;
-}
-
-
-
-int getuid(void)
-{
-    return 0;
-}
-
 /* Additional includes for compatibility functions */
 #include <errno.h>
 #include <stddef.h>

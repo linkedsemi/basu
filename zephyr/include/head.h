@@ -1,4 +1,28 @@
 
+/* Define types before including any headers to avoid conflicts */
+#ifndef __clock_t_defined
+typedef unsigned long clock_t;
+#define __clock_t_defined
+#endif
+
+#ifndef __clockid_t_defined
+typedef unsigned long clockid_t;
+#define __clockid_t_defined
+#endif
+
+#ifndef __timer_t_defined
+typedef unsigned long timer_t;
+#define __timer_t_defined
+#endif
+
+#ifndef __pid_t_defined
+typedef int pid_t;
+#define __pid_t_defined
+#endif
+
+/* First include basu_zephyr_compat.h to fix SD_BUS_VTABLE_DEPRECATED macro */
+#include "basu_zephyr_compat.h"
+
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/logging/log.h>
@@ -16,8 +40,8 @@
 #pragma GCC diagnostic pop
 #include <zephyr/sys_clock.h>
 #include <zephyr/posix/fcntl.h>
+#include <sys/types.h> /* For uid_t type */
 #include "config.h"
-#include "basu_zephyr_compat.h"
 
 
 
@@ -25,8 +49,10 @@
 extern "C" {
 #endif
 int issetugid(void);
-int geteuid(void);
-int getuid(void);
+// Use uid_t for geteuid and getuid to match the implementation
+#include <sys/types.h>
+uid_t geteuid(void);
+uid_t getuid(void);
 //int isatty(int fd);
 #ifdef __cplusplus
 }

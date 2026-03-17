@@ -1,9 +1,11 @@
+/* Must include Zephyr headers first to avoid type conflicts */
+#include <zephyr/sys/util.h>
+#include <zephyr/posix/unistd.h>
+
 #include <errno.h>
 #include <stddef.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <unistd.h>
-#include <zephyr/sys/util.h>
 #include "../include/basu_zephyr_compat.h"
 
 /*
