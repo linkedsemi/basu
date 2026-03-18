@@ -7,7 +7,7 @@
 #include <unistd.h>
 
 #include "sd-bus.h"
-
+#include "sd-event.h"
 #include "alloc-util.h"
 #include "bus-control.h"
 #include "bus-internal.h"
@@ -3364,3 +3364,51 @@ _public_ int sd_bus_get_close_on_exit(sd_bus *bus) {
 
         return bus->close_on_exit;
 }
+
+_public_ int sd_bus_attach_event(sd_bus *bus, sd_event *e, int priority)
+{
+    if (!bus) {
+        return -EINVAL;
+    }
+
+    // Detach from any existing event loop first
+    sd_bus_detach_event(bus);
+
+    bus->event = e;
+    bus->event_priority = priority;
+
+    // If attaching to a new event loop, we might want to register
+    // the bus file descriptor here if it has one
+    // This is a simplified implementation assuming the bus
+    // integration handles its own IO sources
+    
+    return 0;
+}
+
+_public_ int sd_bus_detach_event(sd_bus *bus)
+{
+    if (!bus) {
+        return -EINVAL;
+    }
+
+    if (bus->event) {
+        // In a complete implementation, we would remove any
+        // IO sources associated with this bus from the event loop
+        // and clean up related resources
+        
+        bus->event = NULL;
+        bus->event_priority = 0;
+    }
+    
+    return 0;
+}
+
+_public_ sd_event* sd_bus_get_event(sd_bus *bus)
+{
+    if (!bus) {
+        return NULL;
+    }
+
+    return bus->event;
+}
+

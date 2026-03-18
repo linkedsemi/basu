@@ -8,7 +8,10 @@
 #include <sys/socket.h>
 #endif
 
-#include "sd-bus.h"
+/* Forward declaration to avoid circular dependency */
+typedef struct sd_event sd_event;
+typedef struct sd_bus_track sd_bus_track;
+typedef struct sd_bus_message sd_bus_message;
 
 #include "bus-error.h"
 #include "bus-kernel.h"
@@ -20,6 +23,9 @@
 #include "refcnt.h"
 #include "socket-util.h"
 #include "util.h"
+
+// Include sd-event.h after other headers to avoid circular dependency
+#include <systemd/sd-event.h>
 
 #ifndef LOG_ERR
 #define LOG_ERR     3
@@ -189,6 +195,8 @@ struct sd_bus {
         RefCount n_ref;
 
         enum bus_state state;
+        sd_event *event;
+        int event_priority; 
         int input_fd, output_fd;
         int message_version;
         int message_endian;

@@ -6,15 +6,12 @@
 
 #include <stdio.h>
 
+#ifdef __ZEPHYR__
+
+/* Only define ftrylockfile if it's not already defined */
+#ifndef ftrylockfile
 #include <sys/lock.h>
 #include <sys/reent.h>
-
-void flockfile(FILE *fp)
-{
-    if (fp && !(fp->_flags & __SSTR)) {
-        __lock_acquire_recursive(fp->_lock);
-    }
-}
 
 int ftrylockfile(FILE *fp)
 {
@@ -23,10 +20,6 @@ int ftrylockfile(FILE *fp)
     }
     return 0;
 }
+#endif
 
-void funlockfile(FILE *fp)
-{
-    if (fp && !(fp->_flags & __SSTR)) {
-        __lock_release_recursive(fp->_lock);
-    }
-}
+#endif /* __ZEPHYR__ */

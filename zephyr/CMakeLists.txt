@@ -14,12 +14,12 @@ zephyr_library_include_directories(${BASU_SOURCE_DIR}/libsystemd/sd-bus)
 zephyr_library_include_directories(${BASU_SOURCE_DIR}/libsystemd/sd-daemon)
 zephyr_library_include_directories(${BASU_SOURCE_DIR}/systemd)
 zephyr_library_include_directories(${BASU_DIR}/include/systemd)
-zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/src)
-zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libclist-3/src)
-zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libcstdaux-1/src)
-zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libcrbtree-3/src)
-zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libcdvar-1/src)
-zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libcutf8-1/src)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../dbus-broker/src)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../dbus-broker/subprojects/libclist-3/src)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../dbus-broker/subprojects/libcstdaux-1/src)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../dbus-broker/subprojects/libcrbtree-3/src)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../dbus-broker/subprojects/libcdvar-1/src)
+zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../dbus-broker/subprojects/libcutf8-1/src)
 
 
 # Add Zephyr compatibility sources
@@ -27,6 +27,7 @@ zephyr_library_sources(
   ${CMAKE_CURRENT_LIST_DIR}/tool/flockfile.c
   ${CMAKE_CURRENT_LIST_DIR}/tool/sys_compat.c
   ${CMAKE_CURRENT_LIST_DIR}/tool/sys_fun.c
+  ${CMAKE_CURRENT_LIST_DIR}/tool/string_fun.c
 )
 
 # Add essential basu source files

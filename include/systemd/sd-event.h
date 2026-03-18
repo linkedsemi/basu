@@ -14,9 +14,8 @@
 #define SD_EVENT_H
 
 #include <zephyr/kernel.h>
-// #include <zephyr/sys/atomic.h>
-// #include <zephyr/sys/dlist.h>
-// #include <zephyr/sys/ring_buffer.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/sys/dlist.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -25,35 +24,50 @@
 #include <zephyr/types.h>
 #include <time.h>
 
+// Define struct signalfd_siginfo if not available
+#ifndef HAVE_SIGNALFD_SIGINFO
+struct signalfd_siginfo {
+    uint32_t ssi_signo;
+    int32_t ssi_errno;
+    int32_t ssi_code;
+    uint32_t ssi_pid;
+    uint32_t ssi_uid;
+    int32_t ssi_fd;
+    uint32_t ssi_tid;
+    uint32_t ssi_band;
+    uint32_t ssi_overrun;
+    uint32_t ssi_trapno;
+    int32_t ssi_status;
+    int32_t ssi_int;
+    uint64_t ssi_ptr;
+    uint64_t ssi_utime;
+    uint64_t ssi_stime;
+    uint64_t ssi_addr;
+    uint16_t ssi_addr_lsb;
+    uint8_t pad[46];
+};
+#define HAVE_SIGNALFD_SIGINFO 1
+#endif
+
+#ifdef __ZEPHYR__
+#include <zephyr/net/socket.h>
+#include <zephyr/posix/poll.h>
+#include <zephyr/posix/time.h>
+#include <zephyr/sys/timeutil.h>
+#endif
+
+// Add missing type definitions
+#ifndef pid_t
+typedef int pid_t;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// struct signalfd_siginfo {
-// 	uint32_t ssi_signo;    /* Signal number */
-// 	int32_t ssi_errno;     /* Error number (unused) */
-// 	int32_t ssi_code;      /* Signal code */
-// 	uint32_t ssi_pid;      /* PID of sender */
-// 	uint32_t ssi_uid;      /* Real UID of sender */
-// 	int32_t ssi_fd;        /* File descriptor (SIGIO) */
-// 	uint32_t ssi_tid;      /* Kernel timer ID (POSIX timers) */
-// 	uint32_t ssi_band;     /* Band event (SIGIO) */
-// 	uint32_t ssi_overrun;  /* POSIX timer overrun count */
-// 	uint32_t ssi_trapno;   /* Trap number that caused signal */
-// 	int32_t ssi_status;    /* Exit status or signal (SIGCHLD) */
-// 	int32_t ssi_int;       /* Integer sent by sigqueue(2) */
-// 	void *ssi_ptr;         /* Pointer sent by sigqueue(2) */
-// 	uint64_t ssi_utime;    /* User CPU time consumed (SIGCHLD) */
-// 	uint64_t ssi_stime;    /* System CPU time consumed (SIGCHLD) */
-// 	uint64_t ssi_addr;     /* Address that generated signal (for hardware-generated signals) */
-// 	uint8_t ssi_pad[32];   /* Pad size to 128 bytes (allow for future fields) */
-// };
-
 /* Opaque types */
 typedef struct sd_event sd_event;
 typedef struct sd_event_source sd_event_source;
-typedef struct signalfd_siginfo sd_signal_info;
 typedef struct DispatchContext DispatchContext;  /* Forward declaration for dispatch context */
 
 /* Handler function types */

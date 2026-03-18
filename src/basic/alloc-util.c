@@ -2,11 +2,6 @@
 
 #include <stdint.h>
 #include <string.h>
-
-#ifdef __ZEPHYR__
-#include "basu_zephyr_compat.h"
-#endif
-
 #include "alloc-util.h"
 #include "util.h"
 

@@ -25,6 +25,17 @@
 #include <poll.h>    /* For struct pollfd */
 #include <zephyr/logging/log.h> /* For Zephyr logging */
 
+/* Locale-related definitions for Zephyr */
+#ifndef __locale_t_defined
+/* Only define locale_t if not already defined by newlib */
+#ifdef __NEWLIB__
+/* Newlib already defines locale_t, use its definition */
+#else
+typedef void* locale_t;
+#endif
+#define __locale_t_defined
+#endif
+
 /* Define __gnuc_va_list for Zephyr compatibility */
 #ifndef __gnuc_va_list
 #define __gnuc_va_list __va_list
@@ -188,19 +199,50 @@
 #define LOG_ERR 3
 #endif
 
-/* Provide log_error stub for Zephyr */
-#ifndef log_error
-#define log_error(fmt, ...) do { \
-    LOG_ERR(fmt ": %s", ##__VA_ARGS__, strerror(errno)); \
-} while(0)
+/* Provide log_error stub for Zephyr only if not already defined by basu */
+#ifdef __ZEPHYR__
+/* Save Zephyr log macros with different names */
+#define ZEPHYR_LOG_ERR(fmt, ...) LOG_ERR(fmt, ##__VA_ARGS__)
+#define ZEPHYR_LOG_INF(fmt, ...) LOG_INF(fmt, ##__VA_ARGS__)
+#define ZEPHYR_LOG_DBG(fmt, ...) LOG_DBG(fmt, ##__VA_ARGS__)
+
+/* Temporarily undefine Zephyr log macros to avoid conflicts */
+#undef LOG_ERR
+#undef LOG_INFO
+#undef LOG_DEBUG
+
+/* Define basu-compatible log level constants */
+#define LOG_ERR     3
+#define LOG_INFO    6
+#define LOG_DEBUG   7
+#endif /* __ZEPHYR__ */
+
+
+
+/* String utility functions */
+#ifndef strdup
+char *strdup(const char *s);
 #endif
 
-#ifndef log_info
-#define log_info(fmt, ...) LOG_INF(fmt, ##__VA_ARGS__)
+#ifndef strndup
+char *strndup(const char *s, size_t n);
 #endif
 
-#ifndef log_debug
-#define log_debug(fmt, ...) LOG_DBG(fmt, ##__VA_ARGS__)
+#ifndef stpcpy
+char *stpcpy(char *dest, const char *src);
+#endif
+
+#ifndef strcasecmp
+int strcasecmp(const char *s1, const char *s2);
+#endif
+
+#ifndef strtod_l
+/* Only declare strtod_l if not already declared by newlib */
+#ifdef __NEWLIB__
+/* Newlib already defines strtod_l, use its definition */
+#else
+double strtod_l(const char *nptr, char **endptr, locale_t loc);
+#endif
 #endif
 
 // 只有在Zephyr没有定义的情况下才定义这些宏
@@ -292,7 +334,6 @@ int munmap(void *addr, size_t length);
 // #include <unistd.h>
 #include <stdio.h>  /* Add stdio.h for FILE type */
 #include <signal.h>
-#include <string.h>
 #endif
 
 /* Type definitions for Zephyr */
@@ -308,236 +349,76 @@ pid_t waitpid(pid_t pid, int *status, int options);
 
 /* Add missing function declarations */
 int asprintf(char **strp, const char *fmt, ...);
+int vasprintf(char **strp, const char *fmt, va_list ap);
 int clock_gettime(clockid_t clk_id, struct timespec *tp);
 FILE *open_memstream(char **ptr, size_t *sizeloc);
 
+/* String utility functions */
+char *strdup(const char *s);
+char *strndup(const char *s, size_t n);
+char *stpcpy(char *dest, const char *src);
+int strcasecmp(const char *s1, const char *s2);
+/* Only declare strchrnul if not already declared by newlib */
+#ifdef __NEWLIB__
+/* Newlib already defines strchrnul, use its definition */
+#else
+const char *strchrnul(const char *s, int c);
+#endif
+
 /* Implementations or stubs for missing POSIX functions */
 #ifndef issetugid
-static inline int issetugid(void) {
+static int issetugid(void) {
     return 0; /* Not applicable in Zephyr */
 }
 #endif
 
-/* Implementation of vasprintf for Zephyr */
-// static inline int vasprintf(char **strp, const char *fmt, va_list ap) {
-//     int len;
-//     char *str;
-    
-//     /* First try with a reasonable size */
-//     len = vsnprintf(NULL, 0, fmt, ap);
-//     if (len < 0) {
-//         return -1;
-//     }
-    
-//     str = (char *)malloc(len + 1);
-//     if (!str) {
-//         return -1;
-//     }
-    
-//     len = vsnprintf(str, len + 1, fmt, ap);
-//     if (len < 0) {
-//         free(str);
-//         return -1;
-//     }
-    
-//     *strp = str;
-//     return len;
-// }
+/* Only define functions if they haven't been defined by the standard library */
 
-// static inline char *strdup(const char *s) {
-//     size_t len = strlen(s) + 1;
-//     char *dup = (char *)malloc(len);
-//     if (dup) {
-//         memcpy(dup, s, len);
-//     }
-//     return dup;
-// }
-
-/* Implementation of strndup for Zephyr */
-// static inline char *strndup(const char *s, size_t n) {
-//     size_t len = strnlen(s, n);
-//     char *dup = (char *)malloc(len + 1);
-//     if (dup) {
-//         memcpy(dup, s, len);
-//         dup[len] = '\0';
-//     }
-//     return dup;
-// }
-
-/* Implementation of stpcpy for Zephyr */
-// static inline char *stpcpy(char *dest, const char *src) {
-//     while ((*dest++ = *src++) != '\0');
-//     return --dest;
-// }
-
-/* Implementation of memrchr for Zephyr */
-// static inline void *memrchr(const void *s, int c, size_t n) {
-//     const unsigned char *p = (const unsigned char *)s;
-//     const unsigned char *e = p + n;
-    
-//     if (n == 0)
-//         return NULL;
-    
-//     e--;
-//     while (e >= p) {
-//         if (*e == (unsigned char)c)
-//             return (void *)e;
-//         e--;
-//     }
-    
-//     return NULL;
-// }
-
-/* Implementation of strchrnul for Zephyr */
-// static inline char *strchrnul(const char *s, int c) {
-//     if (!s) return NULL;
-    
-//     while (*s != '\0' && *s != (char)c) {
-//         s++;
-//     }
-    
-//     return (char *)s;
-// }
-
-/* Implementation of explicit_bzero for Zephyr */
-// static inline void explicit_bzero(void *s, size_t n) {
-//     memset(s, 0, n);
-//     /* Compiler barrier to prevent optimization */
-//     __asm__ volatile("" ::: "memory");
-// }
-
-// static inline int fileno(FILE *stream) {
-//     /* Zephyr doesn't support fileno, return -1 or handle appropriately */
-//     (void)stream; /* Suppress unused parameter warning */
-//     errno = ENOSYS;
-//     return -1;
-// }
-
-/* File locking functions - stubs since Zephyr doesn't support them */
-// static inline void flockfile(FILE *stream) {
-//     /* No-op in Zephyr */
-//     (void)stream; /* Suppress unused parameter warning */
-// }
-
-// static inline void funlockfile(FILE *stream) {
-//     /* No-op in Zephyr */
-//     (void)stream; /* Suppress unused parameter warning */
-// }
-
-// static inline int ferror_unlocked(FILE *stream) {
-//     return ferror(stream);
-// }
-
-/* Implementation for readlinkat since Zephyr doesn't provide it */
-#ifndef readlinkat
-static inline ssize_t readlinkat(int dirfd, const char *pathname, char *buf, size_t bufsiz) {
-    /* Simple stub that always fails - implement properly if needed */
-    (void)dirfd;    /* Suppress unused parameter warnings */
-    (void)pathname;
-    (void)buf;
-    (void)bufsiz;
-    errno = ENOSYS;
-    return -1;
-}
+/* Function declarations - implementations in tool/sys_compat.c */
+void *memrchr(const void *s, int c, size_t n);
+void explicit_bzero(void *s, size_t n);
+int fileno(FILE *stream);
+void flockfile(FILE *stream);
+void funlockfile(FILE *stream);
+/* Only declare ferror_unlocked if not already declared by newlib */
+#ifdef __NEWLIB__
+/* Newlib already defines ferror_unlocked, use its definition */
+#else
+int ferror_unlocked(FILE *stream);
 #endif
-
-#if 0
-/* Implementation of open_memstream for Zephyr */
-inline FILE *open_memstream(char **ptr, size_t *sizeloc) {
-    FILE *stream;
-    char *buffer;
-    size_t buffer_size = 4096; /* Initial buffer size */
-    
-    if (!ptr || !sizeloc) {
-        errno = EINVAL;
-        return NULL;
-    }
-    
-    /* Allocate initial buffer */
-    buffer = malloc(buffer_size);
-    if (!buffer) {
-        errno = ENOMEM;
-        return NULL;
-    }
-    
-    /* Open the buffer as a memory stream */
-    stream = fmemopen(buffer, buffer_size, "w");
-    if (!stream) {
-        free(buffer);
-        return NULL;
-    }
-    
-    /* Store the buffer pointer and initial size */
-    *ptr = buffer;
-    *sizeloc = 0; /* Initial size is 0 */
-    
-    return stream;
-}
-#endif
+ssize_t readlinkat(int dirfd, const char *pathname, char *buf, size_t bufsiz);
 
 /* Define typeof as __typeof__ for Zephyr compatibility */
 #ifndef typeof
 #define typeof __typeof__
 #endif
 
-/* Locale-related definitions for Zephyr */
-#ifndef locale_t
-/* Simple typedef for locale_t since Zephyr doesn't provide it */
-// typedef void* locale_t;
-#endif
-
-/* Locale functions stubs */
-// static inline locale_t newlocale(int category_mask, const char *locale, locale_t base) {
-//     (void)category_mask;
-//     (void)locale;
-//     (void)base;
-//     errno = ENOSYS;
-//     return NULL;
-// }
-
-// static inline void freelocale(locale_t locale) {
-//     (void)locale;
-//     /* No-op in Zephyr */
-// }
-
-// static inline double strtod_l(const char *nptr, char **endptr, locale_t loc) {
-//     (void)loc;
-//     return strtod(nptr, endptr);
-// }
-
-/* String comparison functions */
-// static inline int strcasecmp(const char *s1, const char *s2) {
-//     /* Simple case-insensitive comparison */
-//     while (*s1 && *s2 && tolower(*s1) == tolower(*s2)) {
-//         s1++;
-//         s2++;
-//     }
-//     return tolower(*s1) - tolower(*s2);
-// }
-
-// static inline int strncasecmp(const char *s1, const char *s2, size_t n) {
-//     /* Simple case-insensitive comparison with limit */
-//     while (n > 0 && *s1 && *s2 && tolower(*s1) == tolower(*s2)) {
-//         s1++;
-//         s2++;
-//         n--;
-//     }
-//     if (n == 0) {
-//         return 0;
-//     }
-//     return tolower(*s1) - tolower(*s2);
-// }
 
 /* Process-related functions */
-static inline uid_t geteuid(void) {
-    /* Return 0 (root) as default in Zephyr */
-    return 0;
-}
+#ifndef geteuid
+uid_t geteuid(void);
+#endif
 
-static inline uid_t getuid(void) {
-    /* Return 0 (root) as default in Zephyr */
-    return 0;
-}
+#ifndef getuid
+uid_t getuid(void);
+#endif
+
+/* Function declarations for locale and process functions */
+/* Only declare newlocale if not already declared by newlib */
+#ifdef __NEWLIB__
+/* Newlib already defines newlocale, use its definition */
+#else
+locale_t newlocale(int category_mask, const char *locale, locale_t base);
+#endif
+
+/* Only declare freelocale if not already declared by newlib */
+#ifdef __NEWLIB__
+/* Newlib already defines freelocale, use its definition */
+#else
+void freelocale(locale_t locale);
+#endif
+uid_t geteuid(void);
+uid_t getuid(void);
 
 /* Ensure LOG_PRI is defined */
 #ifndef LOG_PRI
@@ -556,14 +437,9 @@ static inline uid_t getuid(void) {
 /* Define missing constants */
 #define NOBODY_USER_NAME "nobody"
 
-/* Device number functions */
-static inline unsigned int major(dev_t dev) {
-    return (unsigned int)((dev >> 8) & 0xfff);
-}
-
-static inline unsigned int minor(dev_t dev) {
-    return (unsigned int)(dev & 0xff);
-}
+/* Device number functions - declarations */
+unsigned int major(dev_t dev);
+unsigned int minor(dev_t dev);
 
 
 

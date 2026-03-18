@@ -23,6 +23,7 @@
 
 // Include dispatch context from dbus-broker
 #include <util/dispatch.h>
+#include <fcntl.h>
 
 // Local clist implementation
 // #include "clist.h"
@@ -1423,7 +1424,6 @@ int sd_event_wait(sd_event *event, uint64_t usec)
         event_unlock(event);
         int ret = sd_event_prepare(event);
         if (ret < 0) {
-            LOG_ERR("sd_event_prepare failed: %d", ret);
             return ret;
         }
         event_lock(event);

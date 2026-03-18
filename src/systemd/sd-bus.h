@@ -39,11 +39,12 @@ _SD_BEGIN_DECLARATIONS;
 
 /* Types */
 
-typedef struct sd_bus sd_bus;
+typedef struct sd_event sd_event;
 typedef struct sd_bus_message sd_bus_message;
 typedef struct sd_bus_slot sd_bus_slot;
 typedef struct sd_bus_creds sd_bus_creds;
 typedef struct sd_bus_track sd_bus_track;
+typedef struct sd_bus sd_bus;
 
 typedef struct {
         const char *name;
@@ -115,6 +116,31 @@ typedef void (*sd_bus_destroy_t)(void *userdata);
 
 #include "sd-bus-protocol.h"
 #include "sd-bus-vtable.h"
+
+
+/**
+ * @brief Attach a bus connection to an event loop
+ * @param bus The bus connection
+ * @param e The event loop
+ * @param priority Priority for event source
+ * @return 0 on success, negative errno on error
+ */
+int sd_bus_attach_event(sd_bus *bus, sd_event *e, int priority);
+
+/**
+ * @brief Detach a bus connection from its event loop
+ * @param bus The bus connection
+ * @return 0 on success, negative errno on error
+ */
+int sd_bus_detach_event(sd_bus *bus);
+
+/**
+ * @brief Get the event loop a bus connection is attached to
+ * @param bus The bus connection
+ * @return Pointer to the event loop, or NULL if not attached
+ */
+sd_event* sd_bus_get_event(sd_bus *bus);
+
 
 /* Connections */
 
