@@ -295,8 +295,17 @@ struct ucred {
 #define SO_PEERSEC 31
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Provide declarations; implementation in tool/sys_compat.c */
 int basu_access_fallback(const char *pathname, int mode);
+
+#ifdef __cplusplus
+}
+#endif
+
 #ifndef access
 #define access basu_access_fallback
 #endif
@@ -323,8 +332,21 @@ int basu_isatty(int fd);
 
 /* mmap/munmap function declarations for Zephyr */
 #if defined(__ZEPHYR__)
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 int munmap(void *addr, size_t length);
+// int mprotect(void *addr, size_t len, int prot);
+
+pid_t wait(int *status);
+pid_t waitpid(pid_t pid, int *status, int options);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif
 
 /* IOVEC_MAKE_STRING is defined in io-util.h, so don't redefine it here */
@@ -344,8 +366,7 @@ ssize_t writev(int fd, const struct iovec *iov, int iovcnt);
 int ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout, const sigset_t *sigmask);
 void *memmem(const void *haystack, size_t haystacklen, const void *needle, size_t needlelen);
 void *mempcpy(void *dest, const void *src, size_t n);
-pid_t wait(int *status);
-pid_t waitpid(pid_t pid, int *status, int options);
+
 
 /* Add missing function declarations */
 int asprintf(char **strp, const char *fmt, ...);

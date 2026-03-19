@@ -1,3 +1,4 @@
 name: basu
 build:
   cmake: zephyr
+  kconfig: zephyr/Kconfig

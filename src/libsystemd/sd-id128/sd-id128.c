@@ -143,3 +143,16 @@ _public_ int sd_id128_randomize(sd_id128_t *ret) {
         return 0;
 }
 
+_public_ int sd_id128_get_machine_app_specific(sd_id128_t app_id, sd_id128_t *ret) {
+        // sd_id128_t id;
+        // int r;
+
+        // assert_return(ret, -EINVAL);
+
+        // r = sd_id128_get_machine(&id);
+        // if (r < 0)
+        //         return r;
+
+        // return sd_id128_get_app_specific(id, app_id, ret);
+        return 0;
+}

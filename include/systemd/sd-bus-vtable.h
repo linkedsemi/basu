@@ -40,7 +40,10 @@ enum {
         _SD_BUS_VTABLE_WRITABLE_PROPERTY = 'W'
 };
 
-enum {
+#ifdef SD_BUS_VTABLE_DEPRECATED
+#undef SD_BUS_VTABLE_DEPRECATED
+#endif
+__extension__ enum {
         SD_BUS_VTABLE_DEPRECATED                   = 1ULL << 0,
         SD_BUS_VTABLE_HIDDEN                       = 1ULL << 1,
         SD_BUS_VTABLE_UNPRIVILEGED                 = 1ULL << 2,
@@ -49,6 +52,8 @@ enum {
         SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE        = 1ULL << 5,
         SD_BUS_VTABLE_PROPERTY_EMITS_INVALIDATION  = 1ULL << 6,
         SD_BUS_VTABLE_PROPERTY_EXPLICIT            = 1ULL << 7,
+        SD_BUS_VTABLE_SENSITIVE                    = 1ULL << 8, /* covers both directions: method call + reply */
+        SD_BUS_VTABLE_ABSOLUTE_OFFSET              = 1ULL << 9,
         _SD_BUS_VTABLE_CAPABILITY_MASK             = 0xFFFFULL << 40
 };
 

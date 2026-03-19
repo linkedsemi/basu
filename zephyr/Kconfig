@@ -1,0 +1,3 @@
+config BASU
+    bool "The sd-bus library"
+    select POSIX_API

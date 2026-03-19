@@ -110,7 +110,9 @@ zephyr_library_sources(
   ${BASU_SOURCE_DIR}/libsystemd/sd-event/sd-event.c
   )
 
-zephyr_include_directories(${BASU_DIR}/include)
+zephyr_include_directories(
+  ${BASU_DIR}/include
+  )
 
 # Link dbus_broker library for dispatch_context support
 # Note: This creates a circular dependency, so we use INTERFACE to avoid it

@@ -26,6 +26,8 @@
 #include "strv.h"
 #include "missing.h"
 
+#include "sd-event.h"
+
 #define log_debug_bus_message(m)                                         \
         do {                                                             \
                 sd_bus_message *_mm = (m);                               \
@@ -2878,6 +2880,53 @@ _public_ void* sd_bus_get_current_userdata(sd_bus *bus) {
         assert_return(bus, NULL);
 
         return bus->current_userdata;
+}
+
+_public_ int sd_bus_attach_event(sd_bus *bus, sd_event *e, int priority)
+{
+        // assert_return(bus, -EINVAL);
+        // assert_return(bus = bus_resolve(bus), -ENOPKG);
+        // assert_return(e, -EINVAL);
+        // assert_return(!bus_pid_changed(bus), -ECHILD);
+
+        // if (bus->event_source) {
+        //         if (bus->event_source->e == e && bus->event_source->priority == priority)
+        //                 return 0;
+
+        //         sd_event_source_unref(bus->event_source);
+        //         bus->event_source = NULL;
+        // }
+
+        // bus->event_source = sd_event_add_io(e, bus->input_fd, POLLIN, event_callback, bus);
+        // if (!bus->event_source)
+        //         return -ENOMEM;
+
+        // sd_event_source_set_priority(bus->event_source, priority);
+
+        return 0;
+}
+
+_public_ int sd_bus_detach_event(sd_bus *bus)
+{
+        // assert_return(bus, -EINVAL);
+        // assert_return(bus = bus_resolve(bus), -ENOPKG);
+        // assert_return(!bus_pid_changed(bus), -ECHILD);
+
+        // if (!bus->event_source)
+        //         return 0;
+
+        // sd_event_source_unref(bus->event_source);
+        // bus->event_source = NULL;
+
+        return 0;
+}
+
+_public_ sd_event* sd_bus_get_event(sd_bus *bus)
+{
+        // assert_return(bus, NULL);
+
+        // return bus->event_source ? bus->event_source->e : NULL;
+        return NULL;
 }
 
 static int bus_default(int (*bus_open)(sd_bus **), sd_bus **default_bus, sd_bus **ret) {

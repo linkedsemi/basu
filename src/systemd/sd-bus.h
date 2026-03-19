@@ -23,6 +23,7 @@
 #ifdef __ZEPHYR__
 #include <zephyr/net/net_ip.h>
 #include "basu_zephyr_compat.h"
+#include <systemd/sd-event.h>
 #else
 #include <sys/uio.h>
 #endif
