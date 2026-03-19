@@ -25,12 +25,9 @@
 #include <util/dispatch.h>
 #include <fcntl.h>
 
-// Local clist implementation
-// #include "clist.h"
-
 #ifdef __ZEPHYR__
 #ifndef CONFIG_SD_EVENT_LOG_LEVEL
-#define CONFIG_SD_EVENT_LOG_LEVEL LOG_LEVEL_DBG
+#define CONFIG_SD_EVENT_LOG_LEVEL LOG_LEVEL_INF
 #endif
 LOG_MODULE_REGISTER(sd_event, CONFIG_SD_EVENT_LOG_LEVEL);
 #endif
@@ -48,6 +45,10 @@ LOG_MODULE_REGISTER(sd_event, CONFIG_SD_EVENT_LOG_LEVEL);
 /* Default accuracy for timers */
 #ifndef DEFAULT_ACCURACY_USEC
 #define DEFAULT_ACCURACY_USEC (250 * USEC_PER_MSEC)
+#endif
+
+#ifndef EPOLLIN
+#define EPOLLIN 0x001
 #endif
 
 /* Default priority for event sources */
@@ -238,8 +239,10 @@ sd_event_source *sd_event_source_unref(sd_event_source *source)
             /* Unlink from appropriate list based on type */
             c_list_unlink(&source->link);
             
-            /* For IO sources, deinit dispatch_file */
-            if (source->type == SOURCE_IO) {
+            /* For IO and TIME sources, deinit dispatch_file */
+            if (source->type == SOURCE_IO || source->type == SOURCE_TIME) {
+                LOG_DBG("[sd-event] sd_event_source_unref: calling dispatch_file_deinit for source=%p (type=%d)", 
+                        source, source->type);
                 dispatch_file_deinit(&source->dispatch_file);
             }
             
@@ -365,9 +368,58 @@ sd_event *sd_event_unref(sd_event *event)
         /* Cleanup all sources */
         event_lock(event);
         
-        /* Use CList iteration to cleanup all sources */
+        LOG_DBG("[sd-event] sd_event_unref: cleaning up all sources, sources=%d, timer=%d, defer=%d, signal=%d, exit=%d", 
+                c_list_is_empty(&event->sources), c_list_is_empty(&event->timer_sources), 
+                c_list_is_empty(&event->defer_sources), c_list_is_empty(&event->signal_sources),
+                c_list_is_empty(&event->exit_sources));
+        
+        /* Use CList iteration to cleanup all sources from sources list (IO sources) */
         CList *iter, *safe;
         c_list_for_each_safe(iter, safe, &event->sources) {
+            sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+            
+            /* First unlink the source */
+            c_list_unlink(&source->link);
+            
+            /* Then unref - the source will clean itself up */
+            sd_event_source_unref(source);
+        }
+        
+        /* Also cleanup timer sources */
+        c_list_for_each_safe(iter, safe, &event->timer_sources) {
+            sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+            
+            /* First unlink the source */
+            c_list_unlink(&source->link);
+            
+            /* Then unref - the source will clean itself up */
+            sd_event_source_unref(source);
+        }
+        
+        /* Also cleanup defer sources */
+        c_list_for_each_safe(iter, safe, &event->defer_sources) {
+            sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+            
+            /* First unlink the source */
+            c_list_unlink(&source->link);
+            
+            /* Then unref - the source will clean itself up */
+            sd_event_source_unref(source);
+        }
+        
+        /* Also cleanup signal sources */
+        c_list_for_each_safe(iter, safe, &event->signal_sources) {
+            sd_event_source *source = c_list_entry(iter, sd_event_source, link);
+            
+            /* First unlink the source */
+            c_list_unlink(&source->link);
+            
+            /* Then unref - the source will clean itself up */
+            sd_event_source_unref(source);
+        }
+        
+        /* Also cleanup exit sources */
+        c_list_for_each_safe(iter, safe, &event->exit_sources) {
             sd_event_source *source = c_list_entry(iter, sd_event_source, link);
             
             /* First unlink the source */
@@ -528,8 +580,8 @@ int sd_event_set_dispatch_context(sd_event *event, DispatchContext *dispatch)
     // event->dispatch = *dispatch;  // Copy or reference?
     
 #ifdef __ZEPHYR__
-    LOG_DBG("Event loop %p configured to use external dispatch context %p", 
-            event, dispatch);
+    // LOG_DBG("Event loop %p configured to use external dispatch context %p", 
+    //         event, dispatch);
 #endif
     return 0;
 }
@@ -569,7 +621,10 @@ static void timer_work_handler(struct k_work *work)
     struct k_work_delayable *work_delayable = CONTAINER_OF(work, struct k_work_delayable, work);
     sd_event_source *source = CONTAINER_OF(work_delayable, sd_event_source, data.time.work);
     
+    // LOG_DBG("[sd-event] timer_work_handler called for source %p", source);
+    
     if (source->enabled == SD_EVENT_OFF) {
+        // LOG_DBG("[sd-event] timer_work_handler: source is disabled");
         return;
     }
     
@@ -586,6 +641,28 @@ static void timer_work_handler(struct k_work *work)
         char byte = 1;
         ssize_t ret = write(source->data.time.notify_pipe[1], &byte, 1);
     }
+}
+
+/* Callback when timer notify_pipe becomes readable - called by dispatch_context */
+static int timer_notify_dispatch(DispatchFile *file)
+{
+    sd_event_source *source = CONTAINER_OF(file, sd_event_source, dispatch_file);
+    
+    // LOG_DBG("[sd-event] timer_notify_dispatch called for source %p", source);
+    
+    /* Drain the notification pipe to clear the readable state */
+    char buffer[8];
+    while (read(source->data.time.notify_pipe[0], buffer, sizeof(buffer)) > 0) {
+        /* Keep reading until empty - non-blocking read */
+    }
+    
+    /* Mark as pending so it will be dispatched in the next dispatch phase */
+    source->pending = true;
+    source->data.time.expired = true;
+    
+    // LOG_DBG("[sd-event] timer_notify_dispatch: marked source %p as pending", source);
+    
+    return 0;
 }
 
 /* ============================================================
@@ -800,6 +877,22 @@ int sd_event_add_time(sd_event *event, sd_event_source **source,
 
     k_work_schedule(&s->data.time.work, K_USEC(timeout));
 
+    /* Register notification pipe read-end with dispatch_context for monitoring */
+    int r = dispatch_file_init(&s->dispatch_file, &event->dispatch, timer_notify_dispatch, 
+                               s->data.time.notify_pipe[0], EPOLLIN, 0);
+    if (r < 0) {
+        close(s->data.time.notify_pipe[0]);
+        close(s->data.time.notify_pipe[1]);
+        k_free(s);
+        event_unlock(event);
+        return r;
+    }
+    
+    /* Enable EPOLLIN notification in user_mask - CRITICAL for poll to monitor this fd */
+    dispatch_file_select(&s->dispatch_file, EPOLLIN);
+    
+    // LOG_DBG("[sd-event] Registered notify_pipe[0]=%d with dispatch_context (user_mask=EPOLLIN)", s->data.time.notify_pipe[0]);
+
     /* Add to timer_sources list for processing */
     c_list_link_tail(&event->timer_sources, &s->link);
 
@@ -808,12 +901,14 @@ int sd_event_add_time(sd_event *event, sd_event_source **source,
 
     return 0;
 }
+
 int sd_event_add_time_relative(sd_event *event, sd_event_source **source,
                                int clock, uint64_t usec, uint64_t accuracy,
                                sd_event_time_handler_t callback, void *userdata)
 {
     return 0;
 }
+
 int sd_event_add_signal(sd_event *event, sd_event_source **source,
                         int sig, sd_event_signal_handler_t callback,
                         void *userdata)
@@ -959,7 +1054,6 @@ int sd_event_add_exit(sd_event *event, sd_event_source **source,
                       sd_event_handler_t callback, void *userdata)
 {
     if (!event || !callback) {
-        printk("[sd-event] Invalid parameters: event=%p, callback=%p\n", (void*)event, (void*)callback);
         return -EINVAL;
     }
 
@@ -1258,14 +1352,23 @@ int sd_event_source_set_time(sd_event_source *source, uint64_t usec)
         return -EINVAL;
     }
     source->data.time.usec = usec;
+    
+    /* Clear pending flag when setting new time - ensures timer is re-evaluated */
+    source->pending = false;
+    source->data.time.expired = false;
 
     /* Restart timer with new time */
     if (source->enabled == SD_EVENT_ON) {
         uint64_t now = clock_gettime_monotonic_us();
         uint64_t timeout = (usec > now) ? (usec - now) : 0;
+        
+        /* Restart both k_timer and k_work_delayable to ensure timer fires correctly */
         k_timer_start(&source->data.time.timer,
                       K_USEC(timeout),
                       K_NO_WAIT);
+        
+        /* Re-schedule the delayed work which actually triggers the expiration logic */
+        k_work_reschedule(&source->data.time.work, K_USEC(timeout));
     }
 
     return 0;
@@ -1341,12 +1444,25 @@ static void process_timer_sources(sd_event *event) {
             continue;
         }
         
-        /* Check if timer notification pipe has data */
+        /* Check if timer has expired (set by timer_work_handler) */
+        if (source->data.time.expired && !source->pending) {
+            source->pending = true;
+            // LOG_DBG("[sd-event] Timer %p marked as pending (expired flag set)", source);
+            
+            if (source->enabled == SD_EVENT_ONESHOT) {
+                source->enabled = SD_EVENT_OFF;
+            }
+        }
+        
+        /* Also check notification pipe for compatibility - drain any pending data */
         char buffer[8];
         ssize_t n = read(source->data.time.notify_pipe[0], buffer, sizeof(buffer));
         
+        // LOG_DBG("[sd-event] process_timer_sources: source=%p, read from pipe returned %d", source, (int)n);
+        
         if (n > 0) {
             source->pending = true;
+            // LOG_DBG("[sd-event] Timer %p marked as pending (read %d bytes from pipe)", source, (int)n);
             
             if (source->enabled == SD_EVENT_ONESHOT) {
                 source->enabled = SD_EVENT_OFF;
@@ -1355,10 +1471,6 @@ static void process_timer_sources(sd_event *event) {
             /* Real error, not just "no data yet" */
             // printk("[sd-event] Read error from notify_pipe[%d]: errno=%d\n", 
             //        source->data.time.notify_pipe[0], errno);
-        } else {
-            /* n == 0 or (n < 0 && errno == EAGAIN/EWOULDBLOCK) */
-            /* Timer work handler hasn't written yet, not pending */
-            // printk("[sd-event] Timer not pending yet (no data in pipe)\n");
         }
     }
 }
@@ -1503,10 +1615,16 @@ int sd_event_wait(sd_event *event, uint64_t usec)
     }
 
     event->last_timeout = timeout_ms;
+    
+    LOG_DBG("[sd-event] sd_event_wait: has_pending=%d, timer_timeout_ms=%lld, usec=%llu, final timeout_ms=%d", 
+            has_pending, (long long)timer_timeout_ms, (unsigned long long)usec, timeout_ms);
+    
     event_unlock(event);
 
     /* Use dispatch_context_poll to wait for events */
     int ret = dispatch_context_poll(&event->dispatch, timeout_ms);
+    
+    LOG_DBG("[sd-event] sd_event_wait: dispatch_context_poll returned %d", ret);
     
     return ret;
 }
