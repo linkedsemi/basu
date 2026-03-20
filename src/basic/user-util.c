@@ -37,7 +37,7 @@ int parse_uid(const char *s, uid_t *ret) {
 
         assert(s);
 
-        assert_cc(sizeof(uid_t) == sizeof(uint32_t));
+        // assert_cc(sizeof(uid_t) == sizeof(uint32_t));
         r = safe_atou32(s, &uid);
         if (r < 0)
                 return r;

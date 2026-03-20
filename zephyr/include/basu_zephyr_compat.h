@@ -268,9 +268,9 @@ double strtod_l(const char *nptr, char **endptr, locale_t loc);
 #define pid_t int32_t
 #endif
 
-#ifndef uid_t  
-#define uid_t uint32_t
-#endif
+// #ifndef uid_t  
+// #define uid_t uint32_t
+// #endif
 
 /* Use Zephyr's definition of gid_t (unsigned short) to avoid conflicts */
 #undef gid_t
