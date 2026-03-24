@@ -243,8 +243,6 @@ int sd_event_exit(sd_event *event, int code);
  */
 int sd_event_now(sd_event *event, int clock, uint64_t *usec);
 
-int sd_event_get_fd(sd_event *event);
-int sd_event_get_state(sd_event *event);
 /**
  * @brief Get exit code
  * @param event Event loop

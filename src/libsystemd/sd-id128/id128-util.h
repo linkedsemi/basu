@@ -21,3 +21,4 @@ int id128_read(const char *p, Id128Format f, sd_id128_t *ret);
 void id128_hash_func(const void *p, struct siphash *state);
 int id128_compare_func(const void *a, const void *b) _pure_;
 extern const struct hash_ops id128_hash_ops;
+sd_id128_t id128_make_v4_uuid(sd_id128_t id);

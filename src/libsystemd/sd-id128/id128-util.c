@@ -84,3 +84,16 @@ const struct hash_ops id128_hash_ops = {
         .hash = id128_hash_func,
         .compare = id128_compare_func,
 };
+
+sd_id128_t id128_make_v4_uuid(sd_id128_t id) {
+        /* Stolen from generate_random_uuid() of drivers/char/random.c
+         * in the kernel sources */
+
+        /* Set UUID version to 4 --- truly random generation */
+        id.bytes[6] = (id.bytes[6] & 0x0F) | 0x40;
+
+        /* Set the UUID variant to DCE */
+        id.bytes[8] = (id.bytes[8] & 0x3F) | 0x80;
+
+        return id;
+}

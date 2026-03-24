@@ -10,6 +10,7 @@ zephyr_library_include_directories(${CMAKE_CURRENT_LIST_DIR}/include/sys)
 zephyr_library_include_directories(${BASU_SOURCE_DIR})
 zephyr_library_include_directories(${BASU_SOURCE_DIR}/basic)
 zephyr_library_include_directories(${BASU_SOURCE_DIR}/busctl)
+zephyr_library_include_directories(${BASU_SOURCE_DIR}/fundamental)
 zephyr_library_include_directories(${BASU_DIR}/include/systemd)
 zephyr_library_include_directories(${BASU_SOURCE_DIR}/libsystemd/sd-bus)
 zephyr_library_include_directories(${BASU_SOURCE_DIR}/libsystemd/sd-daemon)
@@ -72,6 +73,8 @@ zephyr_library_sources(
   ${BASU_SOURCE_DIR}/basic/util.c
   ${BASU_SOURCE_DIR}/basic/verbs.c
   ${BASU_SOURCE_DIR}/basic/xml.c
+
+  ${BASU_SOURCE_DIR}/basic/hmac.c
 )
 
 # sd-bus essential sources
@@ -108,11 +111,10 @@ zephyr_library_sources(
 zephyr_library_sources(
   ${BASU_SOURCE_DIR}/libsystemd/sd-journal/sd-journal.c
   ${BASU_SOURCE_DIR}/libsystemd/sd-event/sd-event.c
+  ${BASU_SOURCE_DIR}/fundamental/sha256-fundamental.c
   )
 
-zephyr_include_directories(
-  ${BASU_DIR}/include
-  )
+zephyr_include_directories(${BASU_DIR}/include)
 
 # Link dbus_broker library for dispatch_context support
 # Note: This creates a circular dependency, so we use INTERFACE to avoid it

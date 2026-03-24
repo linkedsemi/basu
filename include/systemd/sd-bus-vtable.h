@@ -40,10 +40,7 @@ enum {
         _SD_BUS_VTABLE_WRITABLE_PROPERTY = 'W'
 };
 
-#ifdef SD_BUS_VTABLE_DEPRECATED
-#undef SD_BUS_VTABLE_DEPRECATED
-#endif
-__extension__ enum {
+enum {
         SD_BUS_VTABLE_DEPRECATED                   = 1ULL << 0,
         SD_BUS_VTABLE_HIDDEN                       = 1ULL << 1,
         SD_BUS_VTABLE_UNPRIVILEGED                 = 1ULL << 2,
@@ -57,8 +54,6 @@ __extension__ enum {
         _SD_BUS_VTABLE_CAPABILITY_MASK             = 0xFFFFULL << 40
 };
 
-/* Re-define after enum to maintain macro compatibility */
-#define SD_BUS_VTABLE_DEPRECATED (1ULL << 0)
 
 #define SD_BUS_VTABLE_CAPABILITY(x) ((uint64_t) (((x)+1) & 0xFFFF) << 40)
 
