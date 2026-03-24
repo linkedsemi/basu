@@ -258,6 +258,8 @@ sd_event_source *sd_event_source_unref(sd_event_source *source)
             /* Close notification pipes if they exist */
             if (source->data.time.notify_pipe[0] >= 0) {
                 close(source->data.time.notify_pipe[0]);
+            }
+            if (source->data.time.notify_pipe[1] >= 0) {
                 close(source->data.time.notify_pipe[1]);
             }
             break;
@@ -830,6 +832,12 @@ int sd_event_add_time(sd_event *event, sd_event_source **source,
                       sd_event_time_handler_t callback, void *userdata)
 {
     if (!event || !source || !callback) {
+        return -EINVAL;
+    }
+
+    /* Validate clock ID */
+    if (clock < 0 || clock > CLOCK_BOOTTIME_ALARM) {
+        // LOG_ERR("[timer] Invalid clock ID: %d", clock);
         return -EINVAL;
     }
 

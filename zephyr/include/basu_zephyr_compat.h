@@ -15,6 +15,17 @@
   #define SD_BUS_VTABLE_DEPRECATED (1ULL << 0)
 #endif
 
+/* Define _noreturn_ for Zephyr compatibility */
+/* This must be defined before including any basu headers that use it */
+/* But only if not already defined elsewhere */
+#ifndef _noreturn_
+#if __STDC_VERSION__ >= 201112L
+#define _noreturn_ _Noreturn
+#else
+#define _noreturn_ __attribute__((noreturn))
+#endif
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 #include <errno.h>

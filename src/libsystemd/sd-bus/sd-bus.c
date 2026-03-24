@@ -147,9 +147,9 @@ static sd_bus* bus_free(sd_bus *b) {
 
         if (b->default_bus_ptr)
                 *b->default_bus_ptr = NULL;
-
+#ifndef CONFIG_DBUS_BROKER_SOCKETPOOL
         bus_close_io_fds(b);
-
+#endif
         free(b->label);
         free(b->groups);
         free(b->rbuffer);
@@ -839,8 +839,9 @@ static int bus_start_address(sd_bus *b) {
         assert(b);
 
         for (;;) {
+#ifndef CONFIG_DBUS_BROKER_SOCKETPOOL
                 bus_close_io_fds(b);
-
+#endif
                 /* If you provide multiple different bus-addresses, we
                  * try all of them in order and use the first one that
                  * succeeds. */
@@ -1118,8 +1119,9 @@ _public_ void sd_bus_close(sd_bus *bus) {
         /* Drop all queued messages so that they drop references to
          * the bus object and the bus may be freed */
         bus_reset_queues(bus);
-
+#ifndef CONFIG_DBUS_BROKER_SOCKETPOOL
         bus_close_io_fds(bus);
+#endif
 }
 
 _public_ sd_bus* sd_bus_flush_close_unref(sd_bus *bus) {
