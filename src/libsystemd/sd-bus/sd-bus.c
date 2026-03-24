@@ -26,6 +26,8 @@
 #include "strv.h"
 #include "missing.h"
 
+#include "sd-event.h"
+
 #define log_debug_bus_message(m)                                         \
         do {                                                             \
                 sd_bus_message *_mm = (m);                               \
@@ -2881,6 +2883,7 @@ _public_ void* sd_bus_get_current_userdata(sd_bus *bus) {
 
         return bus->current_userdata;
 }
+
 
 static int bus_default(int (*bus_open)(sd_bus **), sd_bus **default_bus, sd_bus **ret) {
         sd_bus *b = NULL;

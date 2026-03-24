@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #ifdef __ZEPHYR__
 #include <zephyr/net/net_ip.h>
+#include <systemd/sd-event.h>
 #else
 #include <sys/uio.h>
 #endif
@@ -115,6 +116,13 @@ typedef void (*sd_bus_destroy_t)(void *userdata);
 #include "sd-bus-protocol.h"
 #include "sd-bus-vtable.h"
 
+/* Naming */
+
+int sd_bus_interface_name_is_valid(const char *p);
+int sd_bus_service_name_is_valid(const char *p);
+int sd_bus_member_name_is_valid(const char *p);
+int sd_bus_object_path_is_valid(const char *p);
+
 /* Connections */
 
 int sd_bus_default(sd_bus **ret);
@@ -198,6 +206,10 @@ sd_bus_slot* sd_bus_get_current_slot(sd_bus *bus);
 sd_bus_message* sd_bus_get_current_message(sd_bus *bus);
 sd_bus_message_handler_t sd_bus_get_current_handler(sd_bus *bus);
 void* sd_bus_get_current_userdata(sd_bus *bus);
+
+int sd_bus_attach_event(sd_bus *bus, sd_event *e, int priority);
+int sd_bus_detach_event(sd_bus *bus);
+sd_event* sd_bus_get_event(sd_bus *bus);
 
 int sd_bus_get_n_queued_read(sd_bus *bus, uint64_t *ret);
 int sd_bus_get_n_queued_write(sd_bus *bus, uint64_t *ret);

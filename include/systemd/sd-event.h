@@ -70,6 +70,39 @@ typedef struct sd_event sd_event;
 typedef struct sd_event_source sd_event_source;
 typedef struct DispatchContext DispatchContext;  /* Forward declaration for dispatch context */
 
+enum {
+        SD_EVENT_INITIAL,
+        SD_EVENT_ARMED,
+        SD_EVENT_PENDING,
+        SD_EVENT_RUNNING,
+        SD_EVENT_EXITING,
+        SD_EVENT_FINISHED,
+        SD_EVENT_PREPARING
+};
+
+enum {
+        /* And everything in-between and outside is good too */
+        SD_EVENT_PRIORITY_IMPORTANT = -100,
+        SD_EVENT_PRIORITY_NORMAL = 0,
+        SD_EVENT_PRIORITY_IDLE = 100
+};
+
+#ifndef EPOLLIN
+#define EPOLLIN 0x001
+#endif
+
+#ifndef CLOCK_BOOTTIME
+#define CLOCK_BOOTTIME          7
+#endif
+
+#ifndef CLOCK_REALTIME_ALARM
+#define CLOCK_REALTIME_ALARM    8
+#endif
+
+#ifndef CLOCK_BOOTTIME_ALARM
+#define CLOCK_BOOTTIME_ALARM    9
+#endif
+
 /* Handler function types */
 typedef int (*sd_event_io_handler_t)(sd_event_source *s, int fd,
                                       uint32_t revents, void *userdata);

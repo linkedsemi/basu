@@ -11,6 +11,9 @@
 #include "random-util.h"
 #include "missing.h"
 
+#include "hmac.h"
+
+
 _public_ char *sd_id128_to_string(sd_id128_t id, char s[SD_ID128_STRING_MAX]) {
         unsigned n;
 
@@ -143,3 +146,39 @@ _public_ int sd_id128_randomize(sd_id128_t *ret) {
         return 0;
 }
 
+_public_ int sd_id128_get_machine_app_specific(sd_id128_t app_id, sd_id128_t *ret) {
+        sd_id128_t id;
+        int r;
+
+        assert_return(ret, -EINVAL);
+        id = \
+        ((sd_id128_t) { .bytes = { \
+                0x12, 0x34, 0x56, 0x78, \
+                0x9A, 0xBC, 0xDE, 0xF1, \
+                0x23, 0x45, 0x67, 0x89, \
+                0xAB, 0xCD, 0xEF, 0x12 \
+        } });
+        // r = sd_id128_get_machine(&id);
+        // if (r < 0)
+        //         return r;
+
+        return sd_id128_get_app_specific(id, app_id, ret);
+}
+
+
+_public_ int sd_id128_get_app_specific(sd_id128_t base, sd_id128_t app_id, sd_id128_t *ret) {
+        assert_cc(sizeof(sd_id128_t) < SHA256_DIGEST_SIZE); /* Check that we don't need to pad with zeros. */
+        union {
+                uint8_t hmac[SHA256_DIGEST_SIZE];
+                sd_id128_t result;
+        } buf;
+
+        assert_return(ret, -EINVAL);
+        assert_return(!sd_id128_is_null(app_id), -ENXIO);
+
+        hmac_sha256(&base, sizeof(base), &app_id, sizeof(app_id), buf.hmac);
+
+        /* Take only the first half. */
+        *ret = id128_make_v4_uuid(buf.result);
+        return 0;
+}
