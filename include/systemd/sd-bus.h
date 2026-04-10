@@ -128,6 +128,7 @@ int sd_bus_object_path_is_valid(const char *p);
 int sd_bus_default(sd_bus **ret);
 int sd_bus_default_user(sd_bus **ret);
 int sd_bus_default_system(sd_bus **ret);
+int sd_bus_set_default_system(sd_bus *bus);
 
 int sd_bus_open(sd_bus **ret);
 int sd_bus_open_with_description(sd_bus **ret, const char *description);

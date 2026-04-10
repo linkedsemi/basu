@@ -2927,6 +2927,29 @@ _public_ int sd_bus_default(sd_bus **ret) {
         return bus_default(bus_open, busp, ret);
 }
 
+_public_ int sd_bus_set_default_system(sd_bus *bus) {
+    if (!bus)
+        return -EINVAL;
+    
+    if (default_system_bus)
+        return -EEXIST;
+    
+    default_system_bus = bus;
+    bus->default_bus_ptr = &default_system_bus;
+    bus->is_system = true;
+    bus->trusted = false;
+    bus->creds_mask |= SD_BUS_CREDS_UID | SD_BUS_CREDS_EUID | SD_BUS_CREDS_EFFECTIVE_CAPS;
+    bus->is_local = true;
+
+    int r = bus_set_address_system(bus);
+    if (r < 0) {
+        return r;
+    }
+    
+    return 0;
+}
+
+
 _public_ int sd_bus_path_encode(const char *prefix, const char *external_id, char **ret_path) {
         _cleanup_free_ char *e = NULL;
         char *ret;
