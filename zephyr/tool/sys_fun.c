@@ -21,6 +21,7 @@
 #endif
 #include <stdlib.h>
 #include <stdint.h>
+#include "macro.h"
 
 /* Forward declarations for compatibility functions */
 struct sd_bus_creds;
@@ -35,7 +36,8 @@ int bus_creds_extend_by_pid(sd_bus_creds *c, uint64_t mask, sd_bus_creds **ret);
 sd_bus_creds* sd_bus_creds_ref(sd_bus_creds *c);
 sd_bus_creds* sd_bus_creds_unref(sd_bus_creds *c);
 void sd_bus_creds_unrefp(sd_bus_creds **c);
-int sd_bus_creds_get_augmented_mask(sd_bus_creds *c, uint64_t *mask);
+// int sd_bus_creds_get_augmented_mask(sd_bus_creds *c, uint64_t *mask);
+uint64_t sd_bus_creds_get_augmented_mask(const sd_bus_creds *c);
 int sd_bus_creds_has_effective_cap(sd_bus_creds *c, int capability);
 int sd_bus_creds_get_euid(sd_bus_creds *c, uid_t *uid);
 int sd_bus_creds_get_uid(sd_bus_creds *c, uid_t *uid);
@@ -419,10 +421,16 @@ void sd_bus_creds_unrefp(sd_bus_creds **c) {
     *c = sd_bus_creds_unref(*c);
 }
 
-int sd_bus_creds_get_augmented_mask(sd_bus_creds *c, uint64_t *mask) {
-    if (!c || !mask) return -EINVAL;
-    *mask = c->augmented;
-    return 0;
+// int sd_bus_creds_get_augmented_mask(sd_bus_creds *c, uint64_t *mask) {
+//     if (!c || !mask) return -EINVAL;
+//     *mask = c->augmented;
+//     return 0;
+// }
+
+uint64_t sd_bus_creds_get_augmented_mask(const sd_bus_creds *c) {
+        assert_return(c, 0);
+
+        return c->augmented;
 }
 
 int sd_bus_creds_has_effective_cap(sd_bus_creds *c, int capability) {
