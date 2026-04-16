@@ -884,13 +884,48 @@ int bus_socket_write_message(sd_bus *bus, sd_bus_message *m, size_t *idx) {
 
 #ifdef __ZEPHYR__
         /* Zephyr doesn't support MSG_NOSIGNAL */
-        k = sendmsg(bus->output_fd, &mh, MSG_DONTWAIT);
+        /* In Zephyr, EAGAIN (errno=11) means "No more contexts" which may indicate
+         * temporary resource exhaustion. We retry a few times with small delays. */
+        int retry_count = 0;
+        const int max_retries = 3;
+        
+        do {
+                k = sendmsg(bus->output_fd, &mh, MSG_DONTWAIT);
+                
+                if (k >= 0) {
+                        /* Success - clear errno to avoid stale error codes */
+                        errno = 0;
+                        break;
+                }
+                
+                /* Check if it's EAGAIN (resource temporarily unavailable) */
+                if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                        /* Not a retryable error */
+                        return -errno;
+                }
+                
+                /* EAGAIN - retry with exponential backoff */
+                retry_count++;
+                if (retry_count <= max_retries) {
+                        /* Exponential backoff: 100us, 200us, 400us */
+                        k_usleep(100 * (1 << (retry_count - 1)));
+                } else {
+                        /* Max retries exceeded, treat as non-blocking write failure */
+                        return 0;
+                }
+        } while (retry_count <= max_retries);
+        
 #else
         k = sendmsg(bus->output_fd, &mh, MSG_DONTWAIT|MSG_NOSIGNAL);
 #endif
 
-        if (k < 0)
+        if (k < 0) {
+#ifndef __ZEPHYR__
                 return errno == EAGAIN ? 0 : -errno;
+#endif
+                /* For Zephyr, we already handled retries above */
+                return 0;
+        }
 
         *idx += (size_t) k;
         return 1;
