@@ -2,3 +2,19 @@ name: basu
 build:
   cmake: zephyr
   kconfig: zephyr/Kconfig
+settings:
+  # Define the module's root directory
+  module_root: .
+  # Export include directories for other modules
+  includes:
+    - zephyr/include
+    - include
+    - include/systemd
+    - src
+    - src/fundamental
+    - src/basic
+    - src/libsystemd
+    - src/libsystemd/sd-bus
+    - src/libsystemd/sd-daemon
+    - src/libsystemd/sd-id128
+    - src/systemd

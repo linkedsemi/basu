@@ -1,3 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+
 config BASU
-    bool "The sd-bus library"
+    bool "Enable basu (sd-bus library)"
+    default y
     select POSIX_API
+    help
+      Enable the basu library, which provides a lightweight implementation
+      of the systemd sd-bus API for D-Bus communication.
+
+if BASU
+
+config BASU_LOG_LEVEL
+    int "basu log level"
+    default 3
+    range 0 4
+    help
+      Set the logging level for basu library.
+      0 = OFF, 1 = ERROR, 2 = WARNING, 3 = INFO, 4 = DEBUG
+
+config BASU_ENABLE_DAEMON
+    bool "Enable sd-daemon support"
+    default n
+    help
+      Enable sd-daemon API support for service notification.
+
+config BASU_ENABLE_ID128
+    bool "Enable sd-id128 support"
+    default y
+    help
+      Enable sd-id128 API for unique ID generation.
+
+endif # BASU

@@ -1,12 +1,81 @@
 # SPDX-License-Identifier: Apache-2.0
-cmake_minimum_required(VERSION 3.20.0)
-zephyr_library_named(basu)
-zephyr_library_compile_options(-msmall-data-limit=0 -Wno-redundant-decls -Wno-nested-externs)
+#
+# basu - Lightweight sd-bus implementation for Zephyr
+# This CMakeLists.txt provides modular configuration for the basu library
 
+cmake_minimum_required(VERSION 3.20.0)
+
+# Check if basu is enabled via Kconfig
+if(NOT CONFIG_BASU)
+  return()
+endif()
+
+zephyr_library_named(basu)
+
+# ============================================================================
+# Compilation Options
+# ============================================================================
+zephyr_library_compile_options(
+  -msmall-data-limit=0
+  -Wno-redundant-decls
+  -Wno-nested-externs
+  -std=gnu11
+)
+
+# Force include compatibility header
+target_compile_options(basu PRIVATE
+  -include ${CMAKE_CURRENT_SOURCE_DIR}/zephyr/include/head.h
+)
+
+# Additional warning options (disabled some problematic ones for Zephyr)
+target_compile_options(basu PRIVATE
+  -U_ANSI_SOURCE
+  -Werror=undef
+  -Wlogical-op
+  -Wmissing-include-dirs
+  -Wold-style-definition
+  -Wpointer-arith
+  -Winit-self
+  -Wfloat-equal
+  -Wsuggest-attribute=noreturn
+  -Werror=missing-prototypes
+  -Werror=implicit-function-declaration
+  -Werror=missing-declarations
+  -Werror=return-type
+  -Werror=incompatible-pointer-types
+  -Werror=format=2
+  -Wstrict-prototypes
+  -Wredundant-decls
+  -Wmissing-noreturn
+  -Wimplicit-fallthrough=5
+  -Wshadow
+  -Wendif-labels
+  -Wstrict-aliasing=2
+  -Wwrite-strings
+  -Werror=overflow
+  -Werror=shift-count-overflow
+  -Werror=shift-overflow=2
+  -Wdate-time
+  -Wnested-externs
+  -Wno-unused-parameter
+  -Wno-missing-field-initializers
+  -Wno-unused-result
+  -Wno-format-signedness
+  -Wno-format-nonliteral
+  -Wno-error=nonnull
+  -Wno-maybe-uninitialized
+)
+
+# ============================================================================
+# Include Directories
+# ============================================================================
 zephyr_include_directories(
+  # Public headers
   ${CMAKE_CURRENT_SOURCE_DIR}/zephyr/include
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/include/systemd
+  
+  # Internal headers
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/src/fundamental
   ${CMAKE_CURRENT_SOURCE_DIR}/src/basic
@@ -14,13 +83,13 @@ zephyr_include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-bus
   ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-daemon
   ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-id128
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-event
   ${CMAKE_CURRENT_SOURCE_DIR}/src/systemd
-  ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libclist-3/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/../dbus-broker/subprojects/libcstdaux-1/src
 )
 
+# ============================================================================
+# Compile Definitions
+# ============================================================================
 zephyr_library_compile_definitions(
   __ZEPHYR__=1
   BASU_BUILD_ZEPHYR=1
@@ -34,14 +103,22 @@ zephyr_library_compile_definitions(
   _DEFAULT_SOURCE
 )
 
-# ---- shims & tool glue----
-zephyr_library_sources(
-  zephyr/tool/flockfile.c
-  zephyr/tool/sys_fun.c
-  zephyr/src/sys_mmap.c
-)
+# Add log level definition from Kconfig
+if(CONFIG_BASU_LOG_LEVEL EQUAL 0)
+  zephyr_library_compile_definitions(LOG_LEVEL=0)
+elseif(CONFIG_BASU_LOG_LEVEL EQUAL 1)
+  zephyr_library_compile_definitions(LOG_LEVEL=1)
+elseif(CONFIG_BASU_LOG_LEVEL EQUAL 2)
+  zephyr_library_compile_definitions(LOG_LEVEL=2)
+elseif(CONFIG_BASU_LOG_LEVEL EQUAL 3)
+  zephyr_library_compile_definitions(LOG_LEVEL=3)
+elseif(CONFIG_BASU_LOG_LEVEL EQUAL 4)
+  zephyr_library_compile_definitions(LOG_LEVEL=4)
+endif()
 
-# Create symlink for sd-bus.h to fix include path issue
+# ============================================================================
+# Symlink Creation for sd-bus.h
+# ============================================================================
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-bus/sd-bus.h
   COMMAND ln -sf ../../systemd/sd-bus.h ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-bus/sd-bus.h
@@ -49,15 +126,26 @@ add_custom_command(
   COMMENT "Creating symlink for sd-bus.h"
 )
 
-# Add the symlink as a dependency
 add_custom_target(create_sd_bus_symlink ALL
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-bus/sd-bus.h
 )
 
-# Make basu library depend on the symlink creation
 add_dependencies(basu create_sd_bus_symlink)
 
-# ===== src/basic =====
+# ============================================================================
+# Zephyr Compatibility Layer
+# ============================================================================
+zephyr_library_sources(
+  zephyr/tool/flockfile.c
+  zephyr/tool/sys_fun.c
+  zephyr/src/sys_mmap.c
+)
+
+# ============================================================================
+# Core Source Files - Organized by Module
+# ============================================================================
+
+# --- Basic Utilities ---
 zephyr_library_sources(
   src/basic/alloc-util.c
   src/basic/audit-util.c
@@ -93,9 +181,10 @@ zephyr_library_sources(
   src/basic/util.c
   src/basic/verbs.c
   src/basic/xml.c
+  src/basic/hmac.c
 )
 
-# ===== src/libsystemd/sd-bus =====
+# --- sd-bus Core ---
 zephyr_library_sources(
   src/libsystemd/sd-bus/bus-common-errors.c
   src/libsystemd/sd-bus/bus-control.c
@@ -117,56 +206,35 @@ zephyr_library_sources(
   src/libsystemd/sd-bus/sd-bus.c
 )
 
-# ===== sd-id128 =====
-zephyr_library_sources(
-  src/libsystemd/sd-id128/id128-util.c
-  src/libsystemd/sd-id128/sd-id128.c
-)
+# --- sd-id128 (Conditional) ---
+if(CONFIG_BASU_ENABLE_ID128)
+  zephyr_library_sources(
+    src/libsystemd/sd-id128/id128-util.c
+    src/libsystemd/sd-id128/sd-id128.c
+  )
+endif()
 
-# ===== sd-daemon =====
-zephyr_library_sources(
-  src/libsystemd/sd-daemon/sd-daemon.c
-)
+# --- sd-daemon (Conditional) ---
+if(CONFIG_BASU_ENABLE_DAEMON)
+  zephyr_library_sources(
+    src/libsystemd/sd-daemon/sd-daemon.c
+  )
+endif()
 
-# ===== sd-event =====
-zephyr_library_include_directories(
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-event
-)
-
+# --- sd-event ---
 zephyr_library_sources(
   src/libsystemd/sd-event/sd-event.c
 )
 
-target_compile_options(basu PRIVATE
-  -include ${CMAKE_CURRENT_SOURCE_DIR}/zephyr/include/head.h
-)
-
-# 告警/编译选项
-target_compile_options(basu PRIVATE
-  -U_ANSI_SOURCE
-  -Werror=undef -Wlogical-op -Wmissing-include-dirs -Wold-style-definition
-  -Wpointer-arith -Winit-self -Wfloat-equal -Wsuggest-attribute=noreturn
-  -Werror=missing-prototypes -Werror=implicit-function-declaration
-  -Werror=missing-declarations -Werror=return-type
-  -Werror=incompatible-pointer-types -Werror=format=2
-  -Wstrict-prototypes -Wredundant-decls -Wmissing-noreturn
-  -Wimplicit-fallthrough=5 -Wshadow -Wendif-labels -Wstrict-aliasing=2
-  -Wwrite-strings -Werror=overflow -Werror=shift-count-overflow
-  -Werror=shift-overflow=2 -Wdate-time -Wnested-externs
-  -Wno-unused-parameter -Wno-missing-field-initializers
-  -Wno-unused-result -Wno-format-signedness -Wno-format-nonliteral
-  -Wno-error=nonnull -Wno-maybe-uninitialized
-)
-
-zephyr_compile_options(-std=gnu11)
-
-# ===== busctl =====
-zephyr_library_sources(
-  src/busctl/busctl.c
-  src/busctl/busctl-introspect.c
-)
-
-set_source_files_properties(
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/busctl/busctl.c
-  PROPERTIES COMPILE_DEFINITIONS "main=basu_busctl_entry;exit=busctl_thread_exit"
-)
+# --- busctl Tool (Optional) ---
+if(CONFIG_BASU_BUSCTL_TOOL)
+  zephyr_library_sources(
+    src/busctl/busctl.c
+    src/busctl/busctl-introspect.c
+  )
+  
+  set_source_files_properties(
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/busctl/busctl.c
+    PROPERTIES COMPILE_DEFINITIONS "main=basu_busctl_entry;exit=busctl_thread_exit"
+  )
+endif()
