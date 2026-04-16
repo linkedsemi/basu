@@ -8,6 +8,7 @@ zephyr_include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/include/systemd
   ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/fundamental
   ${CMAKE_CURRENT_SOURCE_DIR}/src/basic
   ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd
   ${CMAKE_CURRENT_SOURCE_DIR}/src/libsystemd/sd-bus

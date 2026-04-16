@@ -1309,6 +1309,13 @@ static int dispatch_wqueue(sd_bus *bus) {
         while (bus->wqueue_size > 0) {
 
                 r = bus_write_message(bus, bus->wqueue[0], &bus->windex);
+#ifdef __ZEPHYR__
+                if (r == 0) {
+                        k_usleep(100);
+                        r = bus_write_message(bus, bus->wqueue[0], &bus->windex);
+                }
+#endif
+
                 if (r < 0)
                         return r;
                 else if (r == 0)
