@@ -1309,12 +1309,11 @@ static int dispatch_wqueue(sd_bus *bus) {
         while (bus->wqueue_size > 0) {
 
                 r = bus_write_message(bus, bus->wqueue[0], &bus->windex);
-#ifdef __ZEPHYR__
-                if (r == 0) {
-                        k_usleep(100);
-                        r = bus_write_message(bus, bus->wqueue[0], &bus->windex);
-                }
-#endif
+                /*
+                 * Note: Retry logic is now handled in bus_socket_write_message()
+                 * for Zephyr environments. If it returns 0, the message remains
+                 * in the queue for the next event loop iteration.
+                 */
 
                 if (r < 0)
                         return r;
