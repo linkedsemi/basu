@@ -145,8 +145,9 @@ struct sd_event {
 
     struct k_mutex lock;
 
-    /* For wait/dispatch */
+    /* For wait/dispatch state machine */
     bool prepared;
+    enum sd_event_state state;       /* Current state of the event loop */
     int last_timeout;                /* Last timeout used in poll */
 
     /* Default event loop */
@@ -314,6 +315,9 @@ int sd_event_new(sd_event **event)
     e->watchdog_enabled = false;
     e->prepared = false;
     e->last_timeout = -1;
+    e->state = SD_EVENT_INITIAL;
+    LOG_DBG("sd_event_new: final state: %d", e->state);
+
 
     k_mutex_init(&e->lock);
 
@@ -454,6 +458,11 @@ int sd_event_exit(sd_event *event, int code)
     event->exit_requested = true;
     event->exit_code = code;
     
+    /* State transition: any state → EXITING */
+    event->state = SD_EVENT_EXITING;
+    LOG_DBG("sd_event_exit: final state: %d", event->state);
+
+    
     /* Wake up the poll thread by writing to terminate_pipe */
     dispatch_context_terminate(&event->dispatch);
     
@@ -527,17 +536,10 @@ int sd_event_get_state(sd_event *event)
         return -EINVAL;
     }
     
-    /* Map internal state to systemd-compatible state values */
-    if (event->exit_requested) {
-        return SD_EVENT_STATE_EXITING;
-    }
+    /* Simply return the current state - all state transitions are managed explicitly */
+    LOG_DBG("sd_event_get_state: %d", event->state);
     
-    if (event->prepared) {
-        return SD_EVENT_STATE_PREPARING;
-    }
-    
-    /* When waiting in sd_event_wait, we're in ARMED state */
-    return SD_EVENT_STATE_ARMED;
+    return event->state;
 }
 
 int sd_event_now(sd_event *event, int clock, uint64_t *usec)
@@ -1510,6 +1512,9 @@ int sd_event_prepare(sd_event *event)
 
     event_lock(event);
 
+    /* State transition: INITIAL/ARMED/PENDING → PREPARING */
+    event->state = SD_EVENT_PREPARING;
+
     /* Call prepare callbacks for all sources */
     CList *iter;
     c_list_for_each(iter, &event->sources) {
@@ -1527,6 +1532,8 @@ int sd_event_prepare(sd_event *event)
     process_deferred_sources(event);
 
     event->prepared = true;
+    event->state = SD_EVENT_ARMED;
+    LOG_DBG("sd_event_prepare: final state: %d", event->state);
     event_unlock(event);
 
     return 0;
@@ -1634,6 +1641,21 @@ int sd_event_wait(sd_event *event, uint64_t usec)
     
     LOG_DBG("[sd-event] sd_event_wait: dispatch_context_poll returned %d", ret);
     
+    /* State transition based on poll result:
+     * - ret == 0: Events received → PENDING (ready to dispatch)
+     * - ret < 0: Error or Timeout with no events → ARMED (ready to wait again)
+     */
+    if (ret == 0) {
+        event_lock(event);
+        event->state = SD_EVENT_PENDING;
+        event_unlock(event);
+    } else {
+        event_lock(event);
+        event->state = SD_EVENT_ARMED;
+        event_unlock(event);
+    }
+    
+    LOG_DBG("sd_event_wait: final state: %d", event->state);
     return ret;
 }
 
@@ -1699,10 +1721,16 @@ int sd_event_dispatch(sd_event *event)
         }
     }
 
-    /* Dispatch IO sources via dispatch_context */
+    /* Dispatch Io sources via dispatch_context */
     int ret = dispatch_context_dispatch(&event->dispatch);
     
     event->prepared = false;
+    
+    /* State transition: PENDING → ARMED (after dispatch completes) */
+    event->state = SD_EVENT_INITIAL;
+    LOG_DBG("sd_event_dispatch: final state: %d", event->state);
+
+    
     event_unlock(event);
 
     return ret;

@@ -70,7 +70,7 @@ typedef struct sd_event sd_event;
 typedef struct sd_event_source sd_event_source;
 typedef struct DispatchContext DispatchContext;  /* Forward declaration for dispatch context */
 
-enum {
+enum sd_event_state{
         SD_EVENT_INITIAL,
         SD_EVENT_ARMED,
         SD_EVENT_PENDING,
@@ -136,13 +136,13 @@ enum sd_event_enabled {
 };
 
 /* Event loop states */
-enum sd_event_state {
-    SD_EVENT_STATE_PASSIVE = 0,
-    SD_EVENT_STATE_RUNNING = 1,
-    SD_EVENT_STATE_PREPARING = 2,
-    SD_EVENT_STATE_ARMED = 3,
-    SD_EVENT_STATE_EXITING = 4,
-};
+// enum sd_event_state {
+//     SD_EVENT_STATE_PASSIVE = 0,
+//     SD_EVENT_STATE_RUNNING = 1,
+//     SD_EVENT_STATE_PREPARING = 2,
+//     SD_EVENT_STATE_ARMED = 3,
+//     SD_EVENT_STATE_EXITING = 4,
+// };
 
 /* IO events (matching POSIX poll) */
 #define SD_EVENT_READABLE  0x001
