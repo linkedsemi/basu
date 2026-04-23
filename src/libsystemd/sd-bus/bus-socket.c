@@ -887,7 +887,7 @@ int bus_socket_write_message(sd_bus *bus, sd_bus_message *m, size_t *idx) {
         /* In Zephyr, EAGAIN (errno=11) means "No more contexts" which may indicate
          * temporary resource exhaustion. We retry a few times with small delays. */
         int retry_count = 0;
-        const int max_retries = 3;
+        const int max_retries = 7;
         
         do {
                 k = sendmsg(bus->output_fd, &mh, MSG_DONTWAIT);
