@@ -198,13 +198,29 @@ static int bus_socket_write_auth(sd_bus *b) {
         struct msghdr mh;
         zero(mh);
 
-        mh.msg_iov = b->auth_iovec + b->auth_index;
-        mh.msg_iovlen = ELEMENTSOF(b->auth_iovec) - b->auth_index;
-
 #ifdef __ZEPHYR__
+        /* Zephyr's socketpair spair_write rejects count==0 with EINVAL.
+         * After iovec_advance, some iovecs may have iov_len=0, which would
+         * cause spair_sendmsg to fail. Filter them out here. */
+        struct iovec auth_iov_filtered[ELEMENTSOF(b->auth_iovec)];
+        size_t auth_iov_count = 0;
+        for (size_t _i = b->auth_index; _i < ELEMENTSOF(b->auth_iovec); _i++) {
+                if (b->auth_iovec[_i].iov_len > 0) {
+                        auth_iov_filtered[auth_iov_count++] = b->auth_iovec[_i];
+                }
+        }
+        if (auth_iov_count == 0) {
+                b->auth_index = ELEMENTSOF(b->auth_iovec);
+                return 0;
+        }
+        mh.msg_iov = auth_iov_filtered;
+        mh.msg_iovlen = auth_iov_count;
+
         /* Zephyr doesn't support MSG_NOSIGNAL */
         k = sendmsg(b->output_fd, &mh, MSG_DONTWAIT);
 #else
+        mh.msg_iov = b->auth_iovec + b->auth_index;
+        mh.msg_iovlen = ELEMENTSOF(b->auth_iovec) - b->auth_index;
         k = sendmsg(b->output_fd, &mh, MSG_DONTWAIT|MSG_NOSIGNAL);
 #endif
 
@@ -867,10 +883,32 @@ int bus_socket_write_message(sd_bus *bus, sd_bus_message *m, size_t *idx) {
         j = 0;
         iovec_advance(iov, &j, *idx);
 
+#ifdef __ZEPHYR__
+        /* Zephyr's socketpair spair_write rejects count==0 with EINVAL.
+         * After iovec_advance, some iovecs may have iov_len=0, which would
+         * cause spair_sendmsg to fail. Filter them out here. */
+        struct iovec *iov_filtered = alloca(m->n_iovec * sizeof(struct iovec));
+        size_t iov_count = 0;
+        for (size_t _i = 0; _i < m->n_iovec; _i++) {
+                if (iov[_i].iov_len > 0) {
+                        iov_filtered[iov_count++] = iov[_i];
+                }
+        }
+        if (iov_count == 0) {
+                *idx = BUS_MESSAGE_SIZE(m);
+                return 0;
+        }
+
+        struct msghdr mh = {
+                .msg_iov = iov_filtered,
+                .msg_iovlen = iov_count,
+        };
+#else
         struct msghdr mh = {
                 .msg_iov = iov,
                 .msg_iovlen = m->n_iovec,
         };
+#endif
 
         if (m->n_fds > 0 && *idx == 0) {
                 struct cmsghdr *control;
