@@ -6,6 +6,7 @@ extern "C" {
 
 #include <zephyr/posix/syslog.h>
 #include <zephyr/net/net_ip.h>
+#include <sys/uio.h>
 #include <stdio.h>
 #include <stdarg.h>
 int     isatty (int __fildes);
