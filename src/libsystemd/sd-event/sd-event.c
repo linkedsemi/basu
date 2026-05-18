@@ -1722,6 +1722,7 @@ int sd_event_dispatch(sd_event *event)
     }
 
     /* Dispatch Io sources via dispatch_context */
+    event->dispatch.source = 1;
     int ret = dispatch_context_dispatch(&event->dispatch);
     
     event->prepared = false;
