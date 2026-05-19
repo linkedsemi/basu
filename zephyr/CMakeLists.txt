@@ -7,6 +7,7 @@ if(CONFIG_BASU)
     zephyr_library_include_directories(${ZEPHYR_CURRENT_MODULE_DIR}/src/basic)
     zephyr_library_include_directories(${ZEPHYR_CURRENT_MODULE_DIR}/src/busctl)
     zephyr_library_include_directories(${ZEPHYR_CURRENT_MODULE_DIR}/src/fundamental)
+    zephyr_library_include_directories(${ZEPHYR_CURRENT_MODULE_DIR}/include)
     zephyr_library_include_directories(${ZEPHYR_CURRENT_MODULE_DIR}/include/systemd)
     zephyr_library_include_directories(${ZEPHYR_CURRENT_MODULE_DIR}/src/libsystemd/sd-bus)
     zephyr_library_include_directories(${ZEPHYR_CURRENT_MODULE_DIR}/src/libsystemd/sd-daemon)
@@ -104,8 +105,10 @@ if(CONFIG_BASU)
         ${ZEPHYR_CURRENT_MODULE_DIR}/src/fundamental/sha256-fundamental.c
         )
 
-    zephyr_include_directories(
+    zephyr_export_include_directories(
         ${ZEPHYR_CURRENT_MODULE_DIR}/include
         )
+
+    zephyr_library_link_libraries(dbus-broker)
 
 endif()
