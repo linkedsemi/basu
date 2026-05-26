@@ -26,7 +26,10 @@
 /* Zephyr's recv() doesn't respect the size parameter.
  * We must use a temporary static buffer to safely limit reads.
  */
-#define ZEPHYR_RECV_BUF_SIZE 512
+/* Zephyr: recv buffer - must handle large D-Bus messages (e.g. 
+ * introspection XML up to 4-8KB) in a single recv to avoid the 
+ * writer (broker) getting stuck on socketpair buffer limits. */
+#define ZEPHYR_RECV_BUF_SIZE 8192
 static uint8_t g_zephyr_recv_buf[ZEPHYR_RECV_BUF_SIZE];
 #endif
 
@@ -718,6 +721,22 @@ static void bus_get_peercred(sd_bus *b) {
                 log_debug_errno(r, "Failed to set SO_PASSCRED: %m");
 #endif
 
+#ifdef __ZEPHYR__
+        /*
+         * Zephyr doesn't support SO_PEERCRED/SO_PEERSEC/SO_PEERGROUPS.
+         * For socketpair connections (local IPC), use default credentials.
+         * This matches the behavior in dbus-broker's peer_new_with_fd().
+         */
+        b->ucred.pid = 1;
+        b->ucred.uid = 0;
+        b->ucred.gid = 0;
+        b->ucred_valid = true;
+        
+        /* No SELinux context in Zephyr */
+        b->label = NULL;
+        b->n_groups = 0;
+        b->groups = NULL;
+#else
         /* Get the peer for socketpair() sockets */
         b->ucred_valid = getpeercred(b->input_fd, &b->ucred) >= 0;
 
@@ -729,9 +748,10 @@ static void bus_get_peercred(sd_bus *b) {
         /* Get the list of auxiliary groups of the peer */
         r = getpeergroups(b->input_fd, &b->groups);
         if (r >= 0)
-                b->n_groups = (size_t) r;
-        else if (!IN_SET(r, -EOPNOTSUPP, -ENOPROTOOPT))
-                log_debug_errno(r, "Failed to determine peer's group list: %m");
+                b->n_groups = r;
+        else
+                b->n_groups = (size_t) -1;
+#endif
 }
 
 static int bus_socket_start_auth_client(sd_bus *b) {
@@ -1101,11 +1121,8 @@ int bus_socket_read_message(sd_bus *bus) {
         if (k == 0)
                 return -ECONNRESET;
 
-        /* If recv returns more data than we allocated for, reallocate to fit all data */
         if ((size_t)k > alloc_size - bus->rbuffer_size) {
                 size_t new_size = bus->rbuffer_size + (size_t)k;
-                // log_debug("bus_socket_read_message: Reallocing to fit all recv data: current=%zu, need=%zu, new_size=%zu",
-                //          bus->rbuffer_size, (size_t)k, new_size);
                 b = realloc(bus->rbuffer, new_size);
                 if (!b)
                         return -ENOMEM;
@@ -1113,10 +1130,7 @@ int bus_socket_read_message(sd_bus *bus) {
                 alloc_size = new_size;
         }
 
-        /* Copy all received bytes */
         memcpy((uint8_t*) bus->rbuffer + bus->rbuffer_size, g_zephyr_recv_buf, (size_t)k);
-        // log_debug("bus_socket_read_message: recv returned %d, copied all %d bytes, rbuffer_size=%zu->%zu, alloc_size=%zu",
-        //          k, k, bus->rbuffer_size, bus->rbuffer_size + (size_t)k, alloc_size);
 #else
         iov.iov_base = (uint8_t*) bus->rbuffer + bus->rbuffer_size;
         iov.iov_len = alloc_size - bus->rbuffer_size;

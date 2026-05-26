@@ -638,6 +638,11 @@ int bus_creds_add_more(sd_bus_creds *c, uint64_t mask, pid_t pid, pid_t tid) {
         if (!(mask & SD_BUS_CREDS_AUGMENT))
                 return 0;
 
+#ifdef __ZEPHYR__
+        /* Zephyr doesn't have /proc filesystem, so credential augmentation is not possible */
+        return 0;
+#endif
+
         /* Try to retrieve PID from creds if it wasn't passed to us */
         if (pid > 0) {
                 c->pid = pid;

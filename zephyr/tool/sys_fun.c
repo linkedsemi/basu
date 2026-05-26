@@ -41,6 +41,21 @@ uint64_t sd_bus_creds_get_augmented_mask(const sd_bus_creds *c);
 int sd_bus_creds_has_effective_cap(sd_bus_creds *c, int capability);
 int sd_bus_creds_get_euid(sd_bus_creds *c, uid_t *uid);
 int sd_bus_creds_get_uid(sd_bus_creds *c, uid_t *uid);
+int sd_bus_creds_get_pid(const sd_bus_creds *c, pid_t *pid);
+int sd_bus_creds_get_comm(const sd_bus_creds *c, const char **ret);
+int sd_bus_creds_get_unique_name(const sd_bus_creds *c, const char **ret);
+int sd_bus_creds_get_description(const sd_bus_creds *c, const char **ret);
+int sd_bus_creds_get_owner_uid(const sd_bus_creds *c, uid_t *uid);
+int sd_bus_creds_get_cmdline(const sd_bus_creds *c, char ***ret);
+int sd_bus_creds_get_unit(const sd_bus_creds *c, const char **ret);
+int sd_bus_creds_get_user_unit(const sd_bus_creds *c, const char **ret);
+int sd_bus_creds_get_slice(const sd_bus_creds *c, const char **ret);
+int sd_bus_creds_get_user_slice(const sd_bus_creds *c, const char **ret);
+int sd_bus_creds_get_session(const sd_bus_creds *c, const char **ret);
+int sd_bus_creds_get_audit_login_uid(const sd_bus_creds *c, uid_t *uid);
+int sd_bus_creds_get_audit_session_id(const sd_bus_creds *c, uint32_t *id);
+int sd_bus_creds_get_well_known_names(const sd_bus_creds *c, char ***ret);
+int sd_bus_creds_new_from_pid(sd_bus_creds **ret, pid_t pid);
 
 /* System call implementations needed by basu */
 int ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout_ts, const sigset_t *sigmask) {
@@ -448,5 +463,82 @@ int sd_bus_creds_get_uid(sd_bus_creds *c, uid_t *uid) {
     if (!c || !uid) return -EINVAL;
     *uid = c->uid;
     return 0;
+}
+
+/* Stub creds getters - return -ENODATA on Zephyr (no /proc or systemd available) */
+int sd_bus_creds_get_pid(const sd_bus_creds *c, pid_t *pid) {
+    if (!c || !pid) return -EINVAL;
+    *pid = 0;
+    return -ENODATA;
+}
+int sd_bus_creds_get_comm(const sd_bus_creds *c, const char **ret) {
+    if (!c || !ret) return -EINVAL;
+    *ret = NULL;
+    return -ENODATA;
+}
+int sd_bus_creds_get_unique_name(const sd_bus_creds *c, const char **ret) {
+    if (!c || !ret) return -EINVAL;
+    *ret = NULL;
+    return -ENODATA;
+}
+int sd_bus_creds_get_description(const sd_bus_creds *c, const char **ret) {
+    if (!c || !ret) return -EINVAL;
+    *ret = NULL;
+    return -ENODATA;
+}
+int sd_bus_creds_get_owner_uid(const sd_bus_creds *c, uid_t *uid) {
+    if (!c || !uid) return -EINVAL;
+    *uid = 0;
+    return -ENODATA;
+}
+int sd_bus_creds_get_cmdline(const sd_bus_creds *c, char ***ret) {
+    if (!c || !ret) return -EINVAL;
+    *ret = NULL;
+    return -ENODATA;
+}
+int sd_bus_creds_get_unit(const sd_bus_creds *c, const char **ret) {
+    if (!c || !ret) return -EINVAL;
+    *ret = NULL;
+    return -ENODATA;
+}
+int sd_bus_creds_get_user_unit(const sd_bus_creds *c, const char **ret) {
+    if (!c || !ret) return -EINVAL;
+    *ret = NULL;
+    return -ENODATA;
+}
+int sd_bus_creds_get_slice(const sd_bus_creds *c, const char **ret) {
+    if (!c || !ret) return -EINVAL;
+    *ret = NULL;
+    return -ENODATA;
+}
+int sd_bus_creds_get_user_slice(const sd_bus_creds *c, const char **ret) {
+    if (!c || !ret) return -EINVAL;
+    *ret = NULL;
+    return -ENODATA;
+}
+int sd_bus_creds_get_session(const sd_bus_creds *c, const char **ret) {
+    if (!c || !ret) return -EINVAL;
+    *ret = NULL;
+    return -ENODATA;
+}
+int sd_bus_creds_get_audit_login_uid(const sd_bus_creds *c, uid_t *uid) {
+    if (!c || !uid) return -EINVAL;
+    *uid = 0;
+    return -ENODATA;
+}
+int sd_bus_creds_get_audit_session_id(const sd_bus_creds *c, uint32_t *id) {
+    if (!c || !id) return -EINVAL;
+    *id = 0;
+    return -ENODATA;
+}
+int sd_bus_creds_get_well_known_names(const sd_bus_creds *c, char ***ret) {
+    if (!c || !ret) return -EINVAL;
+    *ret = NULL;
+    return -ENODATA;
+}
+int sd_bus_creds_new_from_pid(sd_bus_creds **ret, pid_t pid) {
+    if (!ret) return -EINVAL;
+    *ret = NULL;
+    return -ENODATA;
 }
 
