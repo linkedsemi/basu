@@ -42,7 +42,7 @@ if(CONFIG_BASU)
         ${ZEPHYR_CURRENT_MODULE_DIR}/src/basic/hashmap.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/src/basic/hexdecoct.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/src/basic/io-util.c
-        # ${ZEPHYR_CURRENT_MODULE_DIR}/src/basic/json.c
+        ${ZEPHYR_CURRENT_MODULE_DIR}/src/basic/json.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/src/basic/locale-util.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/src/basic/log.c
         ${ZEPHYR_CURRENT_MODULE_DIR}/src/basic/memfd-util.c
