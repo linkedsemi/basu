@@ -122,6 +122,15 @@ static int acquire_bus(bool set_monitor, sd_bus **ret) {
         if (r < 0)
                 return log_error_errno(errno, "Failed to create socketpair: %m");
 
+        /* Set both ends to non-blocking (spair ignores MSG_DONTWAIT) */
+        int _flags;
+        _flags = fcntl(sv[0], F_GETFL, 0);
+        if (_flags >= 0)
+                fcntl(sv[0], F_SETFL, _flags | O_NONBLOCK);
+        _flags = fcntl(sv[1], F_GETFL, 0);
+        if (_flags >= 0)
+                fcntl(sv[1], F_SETFL, _flags | O_NONBLOCK);
+
         busctl_broker_fd = sv[0];
         busctl_client_fd = sv[1];
 
@@ -1041,7 +1050,12 @@ static int introspect(int argc, char **argv, void *userdata) {
         if (!members)
                 return log_oom();
 
-        r = sd_bus_call_method(bus, argv[1], argv[2], "org.freedesktop.DBus.Introspectable", "Introspect", &error, &reply_xml, "");
+        _cleanup_(sd_bus_message_unrefp) sd_bus_message *msg = NULL;
+        r = sd_bus_message_new_method_call(bus, &msg, argv[1], argv[2], "org.freedesktop.DBus.Introspectable", "Introspect");
+        if (r < 0)
+                return bus_log_create_error(r);
+
+        r = sd_bus_call(bus, msg, 2000000, &error, &reply_xml);
         if (r < 0)
                 return log_error_errno(r, "Failed to introspect object %s of service %s: %s", argv[2], argv[1], bus_error_message(&error, r));
 

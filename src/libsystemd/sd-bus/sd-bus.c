@@ -1774,8 +1774,7 @@ _public_ int sd_bus_call(
                 if (r < 0)
                         goto fail;
                 if (r == 0) {
-                        r = -ETIMEDOUT;
-                        goto fail;
+                        continue;
                 }
 
                 r = dispatch_wqueue(bus);
@@ -2592,6 +2591,14 @@ static int bus_poll(sd_bus *bus, bool need_more, uint64_t timeout_usec) {
 
         if (timeout_usec != (uint64_t) -1 && (m == USEC_INFINITY || timeout_usec < m))
                 m = timeout_usec;
+
+#ifdef __ZEPHYR__
+        /* Zephyr: ppoll on socketpair fds ignores the timeout.
+         * Cap at 10ms so sd_bus_call's loop can check its own absolute
+         * timeout and return ETIMEDOUT when the call timeout expires. */
+        if (m == USEC_INFINITY || m > 100000)
+                m = 100000;
+#endif
 
         r = ppoll(p, n, m == USEC_INFINITY ? NULL : timespec_store(&ts, m), NULL);
         if (r < 0)
