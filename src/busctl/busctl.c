@@ -283,7 +283,7 @@ static int list_bus_names(int argc, char **argv, void *userdata) {
 
         if (arg_legend) {
                 printf("%-*s %*s %-*s %-*s %-*s %-*s %-*s %-*s",
-                       (int) max_i, "NAME", 10, "PID", 15, "PROCESS", 16, "USER", 13, "CONNECTION", 25, "UNIT", 10, "SESSION", 19, "DESCRIPTION");
+                       (int) max_i, "NAME", 3, "PID", 15, "PROCESS", 15, "USER", 13, "CONNECTION", 25, "UNIT", 10, "SESSION", 19, "DESCRIPTION");
 
                 if (arg_show_machine)
                         puts(" MACHINE");
@@ -595,34 +595,6 @@ static int tree(int argc, char **argv, void *userdata) {
         r = acquire_bus(false, &bus);
         if (r < 0)
                 return r;
-
-#ifdef __ZEPHYR__
-        /* 
-         * In Zephyr, D-Bus services may not support introspection yet.
-         * The synchronous sd_bus_call_method can hang indefinitely waiting for responses.
-         * For now, just list the service names without introspecting their object trees.
-         */
-        if (argc <= 1) {
-                _cleanup_strv_free_ char **names = NULL;
-
-                r = sd_bus_list_names(bus, &names, NULL);
-                if (r < 0) {
-                        printk("[busctl] tree: sd_bus_list_names failed: %d\n", r);
-                        return log_error_errno(r, "Failed to get name list: %m");
-                }
-
-                STRV_FOREACH(i, names) {
-                        if (!arg_unique && (*i)[0] == ':')
-                                continue;
-                        if (!arg_acquired && (*i)[0] == ':')
-                                continue;
-
-                        printf("%s\n", *i);
-                }
-
-                return 0;
-        }
-#endif
 
         if (argc <= 1) {
                 _cleanup_strv_free_ char **names = NULL;

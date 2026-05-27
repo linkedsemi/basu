@@ -14,72 +14,25 @@ int introspect_begin(struct introspect *i, bool trusted) {
         zero(*i);
         i->trusted = trusted;
 
-        /* Allocate initial buffer for XML output */
-        i->introspection = malloc(4096); /* Initial buffer size */
-        if (!i->introspection)
+        i->f = open_memstream(&i->introspection, &i->size);
+        if (!i->f)
                 return -ENOMEM;
 
-        i->size = 0; /* Initial size is 0 */
+        fputs(BUS_INTROSPECT_DOCTYPE
+              "<node>\n", i->f);
 
-        /* Manually write the XML header and root node */
-        const char *header = BUS_INTROSPECT_DOCTYPE "<node>\n";
-        size_t header_len = strlen(header);
-        
-        /* Ensure buffer has enough space */
-        if (header_len >= 4096) {
-                free(i->introspection);
-                return -ENOMEM;
-        }
-        
-        /* Copy header to buffer */
-        memcpy(i->introspection, header, header_len);
-        i->size = header_len;
-
-        /* Note: We won't use FILE* stream anymore, we'll manage the buffer manually */
-        i->f = NULL;
 
         return 0;
 }
 
 int introspect_write_default_interfaces(struct introspect *i, bool object_manager) {
         assert(i);
-        
-        /* Write default interfaces to buffer */
-        const char *interfaces = BUS_INTROSPECT_INTERFACE_PEER
-                                BUS_INTROSPECT_INTERFACE_INTROSPECTABLE
-                                BUS_INTROSPECT_INTERFACE_PROPERTIES;
-        size_t interfaces_len = strlen(interfaces);
-        
-        /* Reallocate buffer if needed */
-        if (i->size + interfaces_len >= 4096) {
-                char *new_buf = realloc(i->introspection, i->size + interfaces_len + 1024);
-                if (!new_buf) {
-                        return -ENOMEM;
-                }
-                i->introspection = new_buf;
-        }
-        
-        /* Copy interfaces to buffer */
-        memcpy(i->introspection + i->size, interfaces, interfaces_len);
-        i->size += interfaces_len;
+        fputs(BUS_INTROSPECT_INTERFACE_PEER
+              BUS_INTROSPECT_INTERFACE_INTROSPECTABLE
+              BUS_INTROSPECT_INTERFACE_PROPERTIES, i->f);
 
-        if (object_manager) {
-                const char *obj_manager = BUS_INTROSPECT_INTERFACE_OBJECT_MANAGER;
-                size_t obj_manager_len = strlen(obj_manager);
-                
-                /* Reallocate buffer if needed */
-                if (i->size + obj_manager_len >= 4096) {
-                        char *new_buf = realloc(i->introspection, i->size + obj_manager_len + 1024);
-                        if (!new_buf) {
-                                return -ENOMEM;
-                        }
-                        i->introspection = new_buf;
-                }
-                
-                /* Copy object manager interface to buffer */
-                memcpy(i->introspection + i->size, obj_manager, obj_manager_len);
-                i->size += obj_manager_len;
-        }
+        if (object_manager)
+                fputs(BUS_INTROSPECT_INTERFACE_OBJECT_MANAGER, i->f);
 
         return 0;
 }
