@@ -44,6 +44,9 @@ static void busctl_cleanup(sd_bus **bus) {
                  * on the broker's end. This allows the broker to detect disconnection
                  * and clean up the peer properly.
                  */
+                printk("busctl cleanup: bus->input_fd = %d, bus->output_fd = %d, "
+                        "busctl_broker_fd = %d, busctl_client_fd = %d\n", 
+                        (*bus)->input_fd, (*bus)->output_fd, busctl_broker_fd, busctl_client_fd);
                 if ((*bus)->input_fd >= 0) {
                         /* Close input/output fds - this triggers HUP on broker side */
                         if ((*bus)->output_fd != (*bus)->input_fd)
@@ -1240,10 +1243,14 @@ static int monitor(int argc, char **argv, int (*dump)(sd_bus_message *m, FILE *f
         const char *unique_name;
         bool is_monitor = false;
         int r;
+        uint64_t start_time, elapsed;
+        const uint64_t timeout_ms = 60 * 1000; /* 1 minute */
 
         r = acquire_bus(true, &bus);
         if (r < 0)
                 return r;
+
+        start_time = k_uptime_get();
 
         /* upgrade connection; it's not used for anything else after this call */
         r = sd_bus_message_new_method_call(bus, &message, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus.Monitoring", "BecomeMonitor");
@@ -1343,9 +1350,16 @@ static int monitor(int argc, char **argv, int (*dump)(sd_bus_message *m, FILE *f
                 if (r > 0)
                         continue;
 
-                r = sd_bus_wait(bus, (uint64_t) -1);
+                // r = sd_bus_wait(bus, (uint64_t) -1);
+                r = sd_bus_wait(bus, 30000000); // block upto 30s
                 if (r < 0)
                         return log_error_errno(r, "Failed to wait for bus: %m");
+
+                elapsed = k_uptime_get();
+                if (elapsed - start_time > timeout_ms) {
+                        log_info("1 minute timeout reached, exiting.");
+                        return 0;
+                }
         }
 }
 

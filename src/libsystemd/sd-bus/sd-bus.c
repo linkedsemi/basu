@@ -207,6 +207,9 @@ _public_ int sd_bus_new(sd_bus **ret) {
                 .original_pid = getpid_cached(),
                 .n_groups = (size_t) -1,
                 .close_on_exit = true,
+#ifdef __ZEPHYR__
+                .trusted = true,
+#endif
         };
 
         assert_se(pthread_mutex_init(&b->memfd_cache_mutex, NULL) == 0);
@@ -2950,7 +2953,7 @@ _public_ int sd_bus_set_default_system(sd_bus *bus) {
     default_system_bus = bus;
     bus->default_bus_ptr = &default_system_bus;
     bus->is_system = true;
-    bus->trusted = false;
+    bus->trusted = true;
     bus->creds_mask |= SD_BUS_CREDS_UID | SD_BUS_CREDS_EUID | SD_BUS_CREDS_EFFECTIVE_CAPS;
     bus->is_local = true;
 
