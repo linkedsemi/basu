@@ -1088,7 +1088,7 @@ int bus_socket_read_message(sd_bus *bus) {
         struct iovec iov = {};
         ssize_t k;
         size_t need;
-        int r;
+        int r, made = 0;
         void *b;
         union {
                 struct cmsghdr cmsghdr;
@@ -1102,8 +1102,20 @@ int bus_socket_read_message(sd_bus *bus) {
         if (r < 0)
                 return r;
 
-        if (bus->rbuffer_size >= need)
-                return bus_socket_make_message(bus, need);
+        /* Extract all complete messages already in the buffer */
+        while (bus->rbuffer_size >= need) {
+                r = bus_socket_make_message(bus, need);
+                if (r < 0)
+                        return r;
+                made = 1;
+
+                r = bus_socket_read_message_need(bus, &need);
+                if (r < 0)
+                        return r;
+        }
+
+        if (made)
+                return 1;
 
         size_t alloc_size = need;
         b = realloc(bus->rbuffer, need);
@@ -1188,8 +1200,16 @@ int bus_socket_read_message(sd_bus *bus) {
         if (r < 0)
                 return r;
 
-        if (bus->rbuffer_size >= need)
-                return bus_socket_make_message(bus, need);
+        /* Extract all complete messages from the newly received data */
+        while (bus->rbuffer_size >= need) {
+                r = bus_socket_make_message(bus, need);
+                if (r < 0)
+                        return r;
+
+                r = bus_socket_read_message_need(bus, &need);
+                if (r < 0)
+                        return r;
+        }
 
         return 1;
 }
