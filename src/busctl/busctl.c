@@ -30,41 +30,16 @@ int basu_busctl_entry(int argc, char *argv[]);
 #include "socketpool.h"
 #include "dbus_broker.h"
 
-/* Track socketpair fds for cleanup.
- * busctl creates its own independent socketpair (not from pool), gives
- * sv[0] to the broker, and uses sv[1] as the sd_bus fd.
- * On exit: close sv[1] first (triggers HUP), wake broker, then close sv[0]. */
-static int busctl_broker_fd = -1;
-static int busctl_client_fd = -1;
-
+/*
+ * Wrapper cleanup: calls disconnect_from_dbroker to properly release
+ * the bus connection back to the socketpool.
+ */
 static void busctl_cleanup(sd_bus **bus) {
         if (*bus) {
-                /*
-                 * First, close the client side of socketpair to trigger POLLHUP
-                 * on the broker's end. This allows the broker to detect disconnection
-                 * and clean up the peer properly.
-                 */
-                printk("busctl cleanup: bus->input_fd = %d, bus->output_fd = %d, "
-                        "busctl_broker_fd = %d, busctl_client_fd = %d\n", 
-                        (*bus)->input_fd, (*bus)->output_fd, busctl_broker_fd, busctl_client_fd);
-                if ((*bus)->input_fd >= 0) {
-                        /* Close input/output fds - this triggers HUP on broker side */
-                        if ((*bus)->output_fd != (*bus)->input_fd)
-                                safe_close((*bus)->output_fd);
-                        safe_close((*bus)->input_fd);
-                        (*bus)->input_fd = (*bus)->output_fd = -1;
-                }
-                sd_bus_flush_close_unref(*bus);
+                printk("busctl cleanup: disconnect from broker\n");
+                disconnect_from_dbroker(*bus);
                 *bus = NULL;
         }
-
-        /* Wake broker to process HUP, then close broker_fd */
-        if (busctl_broker_fd >= 0) {
-                socketpool_wake_broker(g_broker);
-                safe_close(busctl_broker_fd);
-                busctl_broker_fd = -1;
-        }
-        busctl_client_fd = -1;
 }
 #define _cleanup_busctl_ _cleanup_(busctl_cleanup)
 #define _cleanup_bus_ _cleanup_busctl_
@@ -115,60 +90,24 @@ static int bus_log_create_error(int r) {
 
 #ifdef __ZEPHYR__
 static int acquire_bus(bool set_monitor, sd_bus **ret) {
-        /* Use independent socketpair (not from pool). Pool-managed fds are
-         * for long-lived connections; busctl is short-lived. Independent
-         * socketpair avoids pool recycling races with broker peer cleanup. */
-        _cleanup_(sd_bus_unrefp) sd_bus *bus = NULL;
-        int r, sv[2];
-
-        r = socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
-        if (r < 0)
-                return log_error_errno(errno, "Failed to create socketpair: %m");
-
-        /* Set both ends to non-blocking (spair ignores MSG_DONTWAIT) */
-        int _flags;
-        _flags = fcntl(sv[0], F_GETFL, 0);
-        if (_flags >= 0)
-                fcntl(sv[0], F_SETFL, _flags | O_NONBLOCK);
-        _flags = fcntl(sv[1], F_GETFL, 0);
-        if (_flags >= 0)
-                fcntl(sv[1], F_SETFL, _flags | O_NONBLOCK);
-
-        busctl_broker_fd = sv[0];
-        busctl_client_fd = sv[1];
-
-        r = socketpool_add_peer_to_broker(g_broker, sv[0]);
-        if (r < 0) {
-                /* cleanup closes both fds */
-                return log_error_errno(r, "Failed to register peer: %m");
-        }
-
-        /* 
-         * Give broker thread a moment to process peer creation.
-         * This prevents race conditions where bus_start() is called before
-         * the broker has fully initialized the peer object.
+        /*
+         * Use connect_to_dbroker which:
+         * 1. Allocates a socketpair from the socketpool (properly managed fds)
+         * 2. Registers the peer with the broker
+         * 3. Creates and starts the sd-bus (sends Hello)
+         * 4. Waits with polling + 25ms sleep until bus is ready
+         *
+         * This replaces the old manual socketpair/drain/sd_bus_start approach
+         * that suffered from resource leaks, fd recycling races, and timing-
+         * dependent AccessDenied errors during authentication.
          */
-        k_msleep(10);
+        sd_bus *bus = NULL;
+        int r;
 
-        r = sd_bus_new(&bus);
+        r = connect_to_dbroker(&bus);
         if (r < 0)
-                return log_error_errno(r, "Failed to allocate bus: %m");
+                return log_error_errno(r, "Failed to connect to broker: %m");
 
-        r = sd_bus_set_fd(bus, sv[1], sv[1]);
-        if (r < 0)
-                return log_error_errno(r, "Failed to set fd: %m");
-
-        r = sd_bus_set_bus_client(bus, true);
-        if (r < 0)
-                return log_error_errno(r, "Failed to set bus client: %m");
-
-        r = sd_bus_start(bus);
-        if (r < 0)
-                return log_error_errno(r, "Failed to start bus: %m");
-
-        socketpool_wake_broker(g_broker);
-
-        /* Success: transfer ownership to caller; cleanup handles both fds */
         *ret = TAKE_PTR(bus);
         return 0;
 }
