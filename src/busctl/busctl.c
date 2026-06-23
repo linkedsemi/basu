@@ -27,7 +27,6 @@ int basu_busctl_entry(int argc, char *argv[]);
 #include "verbs.h"
 
 #ifdef __ZEPHYR__
-#include "socketpool.h"
 #include "dbus_broker.h"
 
 /*
