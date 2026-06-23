@@ -23,14 +23,13 @@
 #define SNDBUF_SIZE (8*1024*1024)
 
 #ifdef __ZEPHYR__
-/* Zephyr's recv() doesn't respect the size parameter.
- * We must use a temporary static buffer to safely limit reads.
- */
-/* Zephyr: recv buffer - must handle large D-Bus messages (e.g. 
- * introspection XML up to 4-8KB) in a single recv to avoid the 
- * writer (broker) getting stuck on socketpair buffer limits. */
+/* Zephyr's recv() for AF_UNIX reads up to the pipe buffer size.
+ * Use a thread-local (stack) buffer so multiple threads calling
+ * recv() concurrently do not clobber each other's data.
+ * MUST NOT use a global static buffer - that causes a data race
+ * when two threads read from different bus connections at once,
+ * resulting in "InconsistentMessage: Bad message" errors. */
 #define ZEPHYR_RECV_BUF_SIZE 8192
-static uint8_t g_zephyr_recv_buf[ZEPHYR_RECV_BUF_SIZE];
 #endif
 
 static void iovec_advance(struct iovec iov[], unsigned *idx, size_t size) {
@@ -631,9 +630,10 @@ static int bus_socket_read_auth(sd_bus *b) {
         b->rbuffer = p;
 
 #ifdef __ZEPHYR__
-        /* Zephyr's recv() doesn't respect the size parameter.
-         * Read into a temporary buffer, then copy only what we need. */
-        k = recv(b->input_fd, g_zephyr_recv_buf, ZEPHYR_RECV_BUF_SIZE, MSG_DONTWAIT);
+        /* Read into a thread-local stack buffer. A shared static buffer
+         * would be unsafe when multiple threads read concurrently. */
+        uint8_t _z_recv_buf[ZEPHYR_RECV_BUF_SIZE];
+        k = recv(b->input_fd, _z_recv_buf, ZEPHYR_RECV_BUF_SIZE, MSG_DONTWAIT);
         if (k < 0)
                 return errno == EAGAIN ? 0 : -errno;
         if (k == 0)
@@ -641,7 +641,7 @@ static int bus_socket_read_auth(sd_bus *b) {
 
         /* Only copy the bytes we actually need */
         size_t copy_len = MIN((size_t)k, n - b->rbuffer_size);
-        memcpy((uint8_t*) b->rbuffer + b->rbuffer_size, g_zephyr_recv_buf, copy_len);
+        memcpy((uint8_t*) b->rbuffer + b->rbuffer_size, _z_recv_buf, copy_len);
         k = copy_len;
 #else
         iov.iov_base = (uint8_t*) b->rbuffer + b->rbuffer_size;
@@ -1125,9 +1125,11 @@ int bus_socket_read_message(sd_bus *bus) {
         bus->rbuffer = b;
 
 #ifdef __ZEPHYR__
-        /* Zephyr's recv() doesn't respect the size parameter.
-         * Read into a temporary buffer, then copy only what we need. */
-        k = recv(bus->input_fd, g_zephyr_recv_buf, ZEPHYR_RECV_BUF_SIZE, MSG_DONTWAIT);
+        /* Read into a thread-local stack buffer. The global static buffer
+         * caused data races when multiple threads (sender_task, entity_manager,
+         * kcs_bridge) read from different bus connections concurrently. */
+        uint8_t _z_recv_buf[ZEPHYR_RECV_BUF_SIZE];
+        k = recv(bus->input_fd, _z_recv_buf, ZEPHYR_RECV_BUF_SIZE, MSG_DONTWAIT);
         if (k < 0)
                 return errno == EAGAIN ? 0 : -errno;
         if (k == 0)
@@ -1142,7 +1144,7 @@ int bus_socket_read_message(sd_bus *bus) {
                 alloc_size = new_size;
         }
 
-        memcpy((uint8_t*) bus->rbuffer + bus->rbuffer_size, g_zephyr_recv_buf, (size_t)k);
+        memcpy((uint8_t*) bus->rbuffer + bus->rbuffer_size, _z_recv_buf, (size_t)k);
 #else
         iov.iov_base = (uint8_t*) bus->rbuffer + bus->rbuffer_size;
         iov.iov_len = alloc_size - bus->rbuffer_size;
