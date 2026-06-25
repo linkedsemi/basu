@@ -455,18 +455,23 @@ static int find_nodes(sd_bus *bus, const char *service, const char *path, Set *p
                         return bus_log_create_error(r);
                 }
 
-                /* 5s timeout for first attempt; if it times out, wait
-                 * 1000ms for the target service to drain its pipe, then
-                 * retry with the same timeout. */
-                r = sd_bus_call(bus, m, 5000000, &error, &reply);
+                /* Adaptive timeout:
+                 * - First attempt: 8s — enough for large services
+                 *   like EntityManager with 40+ child objects.
+                 * - Retry: 2s — quick confirmation that the service is truly
+                 *   unreachable. Combined with tree_one's service-level
+                 *   fast-fail, an unresponsive service costs ~10.5s total
+                 *   (8+0.5+2) instead of the old 25s+. */
+                uint64_t usec_timeout = (retry == 0) ? 8000000 : 2000000;
+                r = sd_bus_call(bus, m, usec_timeout, &error, &reply);
 
                 if (r >= 0)
                         break; /* Success */
-                
-                if (r == -ETIMEDOUT && retry < 5) {
+
+                if (retry < 5) {
                         printk("[busctl] find_nodes: sd_bus_call returned: %d\n", r);
                         /* Give the slow service time to flush its wqueue */
-                        k_msleep(1000);
+                        k_msleep(500);
                         m = NULL; /* Force re-allocation on retry */
                         continue;
                 }
@@ -492,6 +497,7 @@ static int tree_one(sd_bus *bus, const char *service, const char *prefix, bool m
         _cleanup_free_ char **l = NULL;
         char *m;
         int r;
+        bool service_unresponsive = false; /* fast-fail: skip all paths after first timeout */
 
         paths = set_new(&string_hash_ops);
         if (!paths)
@@ -504,6 +510,54 @@ static int tree_one(sd_bus *bus, const char *service, const char *prefix, bool m
         failed = set_new(&string_hash_ops);
         if (!failed)
                 return log_oom();
+
+        /*
+         * === Pre-flight health probe ===
+         * Before traversing 40+ object paths (e.g., EntityManager),
+         * do a quick Introspect on "/" with a SHORT timeout (3s).
+         *
+         * Rationale:
+         *   - If service is responsive: +3s overhead once, then full
+         *     traversal proceeds normally with generous per-path timeouts.
+         *   - If service is unresponsive/dead: fail in just 3s instead of
+         *     waiting 10s+ (8+2) for the FIRST path's find_nodes retry loop,
+         *     then skipping all remaining paths anyway.
+         *
+         * This eliminates the ~20s wasted on EntityManager's first two
+         * paths that both time out before fast-fail triggers.
+         */
+        {
+                _cleanup_(sd_bus_message_unrefp) sd_bus_message *probe_msg = NULL, *probe_reply = NULL;
+                _cleanup_(sd_bus_error_free) sd_bus_error probe_error = SD_BUS_ERROR_NULL;
+                int probe_rc;
+
+                probe_rc = sd_bus_message_new_method_call(bus, &probe_msg, service, "/",
+                                "org.freedesktop.DBus.Introspectable", "Introspect");
+                if (probe_rc >= 0) {
+                        probe_rc = sd_bus_call(bus, probe_msg, 3000000ULL, &probe_error, &probe_reply);
+                }
+
+                if (probe_rc < 0) {
+                        service_unresponsive = true;
+                        if (many)
+                                printf("Service '%s' probe failed (err=%d, %s), "
+                                       "skipping all paths\n",
+                                       service, probe_rc,
+                                       bus_error_message(&probe_error, probe_rc));
+                        /* Still add "/" to paths so tree prints the root node */
+                        m = strdup("/");
+                        if (!m)
+                                return log_oom();
+                        r = set_put(paths, m);
+                        if (r < 0) {
+                                free(m);
+                                return log_oom();
+                        }
+                        /* Fall through to main loop — all paths will be skipped */
+                }
+        }
+
+        if (!service_unresponsive) {
 
         m = strdup("/");
         if (!m)
@@ -527,10 +581,34 @@ static int tree_one(sd_bus *bus, const char *service, const char *prefix, bool m
                     set_contains(failed, p))
                         continue;
 
+                /* Service-level fast-fail: if a previous path on this
+                 * service timed out, don't waste more time retrying */
+                if (service_unresponsive) {
+                        if (many)
+                                printf("  (skipping %s - service unresponsive)\n", p);
+                        q = set_put(failed, p);
+                        if (q < 0)
+                                return log_oom();
+                        continue;
+                }
+
                 q = find_nodes(bus, service, p, paths, many);
                 if (q < 0) {
                         if (r >= 0)
                                 r = q;
+
+                        /* Mark service as dead on ANY failure so we skip
+                         * all remaining paths for this service.
+                         * This is safe because if Introspect fails for one
+                         * path (timeout, conn refused, etc), it will almost
+                         * certainly fail for others too. */
+                        if (!service_unresponsive) {
+                                service_unresponsive = true;
+                                if (many)
+                                        printf("Service '%s' failed Introspect (err=%d), "
+                                               "skipping remaining paths\n",
+                                               service, q);
+                        }
 
                         q = set_put(failed, p);
                 } else
@@ -542,6 +620,7 @@ static int tree_one(sd_bus *bus, const char *service, const char *prefix, bool m
                 assert(q != 0);
                 p = NULL;
         }
+        } /* end if (!service_unresponsive) — normal traversal */
 
         l = set_get_strv(done);
         if (!l)
@@ -566,6 +645,13 @@ static int tree(int argc, char **argv, void *userdata) {
         r = acquire_bus(false, &bus);
         if (r < 0)
                 return r;
+
+        /* Settle delay: give busy services (especially EntityManager with
+         * large object trees) time to drain their message queues before
+         * we start sending Introspect calls. Without this, the first
+         * Introspect on "/" often times out because the service's wqueue
+         * is full of pending work from initialization. */
+        k_msleep(1500);
 
         if (argc <= 1) {
                 _cleanup_strv_free_ char **names = NULL;
