@@ -441,21 +441,42 @@ static int find_nodes(sd_bus *bus, const char *service, const char *path, Set *p
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         const char *xml;
         int r;
+        int retry;
 
-        r = sd_bus_message_new_method_call(bus, &m, service, path, "org.freedesktop.DBus.Introspectable", "Introspect");
-        if (r < 0) {
-                printk("[busctl] find_nodes: sd_bus_message_new_method_call failed: %d\n", r);
-                return bus_log_create_error(r);
-        }
+        for (retry = 0; retry < 5; retry++) {
+                /* Reset per-retry state */
+                reply = NULL;
+                sd_bus_error_free(&error);
 
-        /* Use 2s timeout; sd_bus_call_method has no timeout parameter
-         * and defaults to ~25s, causing long hangs on non-responsive services. */
-        r = sd_bus_call(bus, m, 2000000, &error, &reply);
-        if (r < 0) {
+                r = sd_bus_message_new_method_call(bus, &m, service, path,
+                        "org.freedesktop.DBus.Introspectable", "Introspect");
+                if (r < 0) {
+                        printk("[busctl] find_nodes: sd_bus_message_new_method_call failed: %d\n", r);
+                        return bus_log_create_error(r);
+                }
+
+                /* 5s timeout for first attempt; if it times out, wait
+                 * 1000ms for the target service to drain its pipe, then
+                 * retry with the same timeout. */
+                r = sd_bus_call(bus, m, 5000000, &error, &reply);
+
+                if (r >= 0)
+                        break; /* Success */
+                
+                if (r == -ETIMEDOUT && retry < 5) {
+                        printk("[busctl] find_nodes: sd_bus_call returned: %d\n", r);
+                        /* Give the slow service time to flush its wqueue */
+                        k_msleep(1000);
+                        m = NULL; /* Force re-allocation on retry */
+                        continue;
+                }
+
                 if (many)
-                        printf("Failed to introspect object %s of service %s: %s\n", path, service, bus_error_message(&error, r));
+                        printf("Failed to introspect object %s of service %s: %s\n",
+                               path, service, bus_error_message(&error, r));
                 else
-                        log_error_errno(r, "Failed to introspect object %s of service %s: %s", path, service, bus_error_message(&error, r));
+                        log_error_errno(r, "Failed to introspect object %s of service %s: %s",
+                                        path, service, bus_error_message(&error, r));
                 return r;
         }
 
