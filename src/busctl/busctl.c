@@ -35,7 +35,7 @@ int basu_busctl_entry(int argc, char *argv[]);
  */
 static void busctl_cleanup(sd_bus **bus) {
         if (*bus) {
-                printk("busctl cleanup: disconnect from broker\n");
+                // printk("busctl cleanup: disconnect from broker\n");
                 disconnect_from_dbroker(*bus);
                 *bus = NULL;
         }
