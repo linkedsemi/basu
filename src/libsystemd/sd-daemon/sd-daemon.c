@@ -80,3 +80,118 @@ _public_ int sd_is_socket(int fd, int family, int type, int listening) {
         return 1;
 }
 
+_public_ int sd_is_socket_inet(int fd, int family, int type, int listening, uint16_t port)
+{
+    // union sockaddr_union sockaddr = {};
+    // socklen_t l = sizeof(sockaddr);
+    // int r;
+
+    // assert_return(fd >= 0, -EBADF);
+    // assert_return(IN_SET(family, 0, AF_INET, AF_INET6), -EINVAL);
+
+    // r = is_socket_internal(fd, type, listening);
+    // if (r <= 0)
+    //     return r;
+
+    // if (getsockname(fd, &sockaddr.sa, &l) < 0)
+    //     return -errno;
+
+    // if (l < sizeof(sa_family_t))
+    //     return -EINVAL;
+
+    // if (!IN_SET(sockaddr.sa.sa_family, AF_INET, AF_INET6))
+    //     return 0;
+
+    // if (family != 0)
+    //     if (sockaddr.sa.sa_family != family)
+    //         return 0;
+
+    // if (port > 0)
+    // {
+    //     unsigned sa_port;
+
+    //     r = sockaddr_port(&sockaddr.sa, &sa_port);
+    //     if (r < 0)
+    //         return r;
+
+    //     return port == sa_port;
+    // }
+
+    return 1;
+}
+_public_ int sd_listen_fds(int unset_environment)
+{
+//     const char *e;
+//     int n, r;
+//     pid_t pid;
+
+//     e = getenv("LISTEN_PID");
+//     if (!e)
+//     {
+//         r = 0;
+//         goto finish;
+//     }
+
+//     r = parse_pid(e, &pid);
+//     if (r < 0)
+//         goto finish;
+
+//     /* Is this for us? */
+//     if (getpid_cached() != pid)
+//     {
+//         r = 0;
+//         goto finish;
+//     }
+
+//     e = getenv("LISTEN_PIDFDID");
+//     if (e)
+//     {
+//         uint64_t own_pidfdid, pidfdid;
+
+//         r = safe_atou64(e, &pidfdid);
+//         if (r < 0)
+//             goto finish;
+
+//         if (pidfd_get_inode_id_self_cached(&own_pidfdid) >= 0)
+//         {
+//             /* Is this *really* for us? */
+//             if (pidfdid != own_pidfdid)
+//             {
+//                 r = 0;
+//                 goto finish;
+//             }
+//         }
+//     }
+
+//     e = getenv("LISTEN_FDS");
+//     if (!e)
+//     {
+//         r = 0;
+//         goto finish;
+//     }
+
+//     r = safe_atoi(e, &n);
+//     if (r < 0)
+//         goto finish;
+
+//     assert_cc(SD_LISTEN_FDS_START < INT_MAX);
+//     if (n <= 0 || n > INT_MAX - SD_LISTEN_FDS_START)
+//     {
+//         r = -EINVAL;
+//         goto finish;
+//     }
+
+//     for (int fd = SD_LISTEN_FDS_START; fd < SD_LISTEN_FDS_START + n; fd++)
+//     {
+//         r = fd_cloexec(fd, true);
+//         if (r < 0)
+//             goto finish;
+//     }
+
+//     r = n;
+
+// finish:
+//     unsetenv_listen(unset_environment);
+//     return r;
+    return 1;
+}
