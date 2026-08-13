@@ -1,5 +1,6 @@
 #include "sd-journal.h"
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -265,4 +266,100 @@ int sd_journal_perror(const char *message)
   (void)message;
 #endif
   return 0;
+}
+
+/*
+ * Journal browsing APIs below are stubbed out for Zephyr: there is no
+ * persistent journal backend, so every operation fails with -ENOSYS while
+ * keeping the systemd-compatible function prototypes.
+ */
+
+int sd_journal_open(sd_journal **ret, int flags)
+{
+    (void)ret;
+    (void)flags;
+    return -ENOSYS;
+}
+
+void sd_journal_close(sd_journal *j)
+{
+    (void)j;
+}
+
+int sd_journal_next(sd_journal *j)
+{
+    (void)j;
+    return -ENOSYS;
+}
+
+int sd_journal_previous(sd_journal *j)
+{
+    (void)j;
+    return -ENOSYS;
+}
+
+int sd_journal_next_skip(sd_journal *j, uint64_t skip)
+{
+    (void)j;
+    (void)skip;
+    return -ENOSYS;
+}
+
+int sd_journal_get_data(sd_journal *j, const char *field, const void **data,
+                        size_t *l)
+{
+    (void)j;
+    (void)field;
+    (void)data;
+    (void)l;
+    return -ENOSYS;
+}
+
+int sd_journal_get_realtime_usec(sd_journal *j, uint64_t *ret)
+{
+    (void)j;
+    (void)ret;
+    return -ENOSYS;
+}
+
+int sd_journal_get_seqnum(sd_journal *j, uint64_t *ret_seqnum,
+                          sd_id128_t *ret_seqnum_id)
+{
+    (void)j;
+    (void)ret_seqnum;
+    (void)ret_seqnum_id;
+    return -ENOSYS;
+}
+
+int sd_journal_seek_head(sd_journal *j)
+{
+    (void)j;
+    return -ENOSYS;
+}
+
+int sd_journal_seek_tail(sd_journal *j)
+{
+    (void)j;
+    return -ENOSYS;
+}
+
+int sd_journal_seek_cursor(sd_journal *j, const char *cursor)
+{
+    (void)j;
+    (void)cursor;
+    return -ENOSYS;
+}
+
+int sd_journal_get_cursor(sd_journal *j, char **ret)
+{
+    (void)j;
+    (void)ret;
+    return -ENOSYS;
+}
+
+int sd_journal_test_cursor(sd_journal *j, const char *cursor)
+{
+    (void)j;
+    (void)cursor;
+    return -ENOSYS;
 }

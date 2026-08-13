@@ -1,6 +1,11 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 #ifndef foosddaemonhfoo
 #define foosddaemonhfoo
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
   Helper call for identifying a passed file descriptor. Returns 1 if
   the file descriptor is a socket of the specified family (AF_INET,
@@ -51,5 +56,9 @@ int sd_listen_fds(int unset_environment);
   See sd_is_socket_inet(3) for more information.
 */
 int sd_is_socket_inet(int fd, int family, int type, int listening, uint16_t port);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
