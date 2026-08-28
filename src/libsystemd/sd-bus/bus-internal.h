@@ -196,7 +196,8 @@ struct sd_bus {
 
         enum bus_state state;
         sd_event *event;
-        int event_priority; 
+        int event_priority;
+        sd_event_source *event_source;
         int input_fd, output_fd;
         int message_version;
         int message_endian;

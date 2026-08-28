@@ -3403,23 +3403,66 @@ _public_ int sd_bus_get_close_on_exit(sd_bus *bus) {
         return bus->close_on_exit;
 }
 
+#ifndef EPOLLIN
+#define EPOLLIN 0x001
+#endif
+
+/*
+ * IO callback invoked by sd_event when the bus socket becomes readable.
+ * Drains all pending messages so method calls / signals are dispatched.
+ */
+static int bus_io_callback(sd_event_source *s, int fd, uint32_t revents,
+                           void *userdata)
+{
+    sd_bus *bus = userdata;
+    int r;
+
+    (void)s;
+    (void)fd;
+    (void)revents;
+
+    for (;;)
+    {
+        r = sd_bus_process(bus, NULL);
+        if (r < 0)
+        {
+            return r;
+        }
+        if (r == 0)
+        {
+            break;
+        }
+    }
+    return 0;
+}
+
 _public_ int sd_bus_attach_event(sd_bus *bus, sd_event *e, int priority)
 {
-    if (!bus) {
+    int r, fd;
+
+    if (!bus || !e) {
         return -EINVAL;
     }
 
     // Detach from any existing event loop first
     sd_bus_detach_event(bus);
 
+    fd = sd_bus_get_fd(bus);
+    if (fd < 0) {
+        return fd;
+    }
+
+    // Register the bus socket with the event loop so incoming
+    // messages are dispatched by sd_event.
+    r = sd_event_add_io(e, &bus->event_source, fd, EPOLLIN,
+                        bus_io_callback, bus);
+    if (r < 0) {
+        return r;
+    }
+
     bus->event = e;
     bus->event_priority = priority;
 
-    // If attaching to a new event loop, we might want to register
-    // the bus file descriptor here if it has one
-    // This is a simplified implementation assuming the bus
-    // integration handles its own IO sources
-    
     return 0;
 }
 
@@ -3429,15 +3472,14 @@ _public_ int sd_bus_detach_event(sd_bus *bus)
         return -EINVAL;
     }
 
-    if (bus->event) {
-        // In a complete implementation, we would remove any
-        // IO sources associated with this bus from the event loop
-        // and clean up related resources
-        
-        bus->event = NULL;
-        bus->event_priority = 0;
+    if (bus->event_source) {
+        sd_event_source_unref(bus->event_source);
+        bus->event_source = NULL;
     }
-    
+
+    bus->event = NULL;
+    bus->event_priority = 0;
+
     return 0;
 }
 
