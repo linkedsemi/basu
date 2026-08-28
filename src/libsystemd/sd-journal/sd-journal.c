@@ -25,6 +25,87 @@ struct journal_kv
     char val[192];
 };
 
+/*
+ * Zephyr has no persistent journal, so phosphor-logging's commit()
+ * cannot query the journal for the fields of a given transaction.
+ * Instead we capture the fields of every sd_journal_send() call here,
+ * indexed by its TRANSACTION_ID, and let log_manager recover them via
+ * basu_journal_get_transaction_fields().
+ */
+#define TX_TABLE_SLOTS 8
+#define TX_MAX_KV 16
+
+struct tx_rec
+{
+    char txid[32];
+    struct journal_kv kv[TX_MAX_KV];
+    int nkv;
+};
+
+static struct tx_rec tx_table[TX_TABLE_SLOTS];
+static int tx_next;
+
+static void tx_capture(const struct journal_kv *kvs, int nkv)
+{
+    const char *txid = NULL;
+    int i;
+
+    for (i = 0; i < nkv; i++) {
+        if (strcmp(kvs[i].key, "TRANSACTION_ID") == 0) {
+            txid = kvs[i].val;
+            break;
+        }
+    }
+    if (txid == NULL || txid[0] == '\0') {
+        return;
+    }
+
+    struct tx_rec *r = &tx_table[tx_next];
+    tx_next = (tx_next + 1) % TX_TABLE_SLOTS;
+
+    memset(r, 0, sizeof(*r));
+    snprintf(r->txid, sizeof(r->txid), "%s", txid);
+    r->nkv = nkv > TX_MAX_KV ? TX_MAX_KV : nkv;
+    for (i = 0; i < r->nkv; i++) {
+        r->kv[i] = kvs[i];
+    }
+}
+
+/* Recover the "KEY=val\n..." fields captured for the given TRANSACTION_ID. */
+int basu_journal_get_transaction_fields(const char *txid,
+                                        char *buf, size_t sz)
+{
+    int i;
+
+    if (txid == NULL || buf == NULL || sz == 0) {
+        return -EINVAL;
+    }
+
+    for (i = 0; i < TX_TABLE_SLOTS; i++) {
+        struct tx_rec *r = &tx_table[i];
+        int j;
+        size_t off = 0;
+
+        if (r->nkv == 0 || strcmp(r->txid, txid) != 0) {
+            continue;
+        }
+        for (j = 0; j < r->nkv; j++) {
+            int n = snprintf(buf + off, sz - off, "%s=%s\n",
+                             r->kv[j].key, r->kv[j].val);
+            if (n < 0) {
+                break;
+            }
+            off += (size_t)n;
+            if (off >= sz) {
+                break;
+            }
+        }
+        buf[sz - 1] = '\0';
+        return 0;
+    }
+    return -ENOENT;
+}
+
 /* Map a journal priority (0-7) to a short tag. */
 static const char *prio_tag(int prio)
 {
@@ -386,6 +467,9 @@ int basu_journal_run_send_fields(const char *first, va_list ap)
         }
         fmt = va_arg(ap, const char *);
     }
+
+    /* Capture the fields for later commit() recovery (Zephyr journald). */
+    tx_capture(kvs, nkv);
 
     /* Substitute {KEY} placeholders in the message (systemd behaviour). */
     if (nkv > 0) {
