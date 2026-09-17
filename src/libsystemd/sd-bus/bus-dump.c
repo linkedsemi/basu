@@ -15,6 +15,12 @@
 #include "terminal-util.h"
 #include "missing.h"
 
+/* Route this TU's stdout-bound stdio (used by `call`/`get-property`/`monitor`
+ * dumps) to the active shell session. The macros only affect FILE* == stdout,
+ * so the open_memstream capture buffer used internally is untouched. See
+ * busctl_zephyr_stdout.h. */
+#include "busctl_zephyr_stdout.h"
+
 #define LOG_ERR 3
 
 #if HAVE_LIBCAP

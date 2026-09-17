@@ -8,6 +8,10 @@
 #include "util.h"
 #include "xml.h"
 
+/* Route this TU's stdout-bound stdio (used by the `introspect` output) to the
+ * active shell session. See busctl_zephyr_stdout.h. */
+#include "busctl_zephyr_stdout.h"
+
 #define NODE_DEPTH_MAX 16
 #define LOG_ERR     3
 

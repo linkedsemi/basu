@@ -28,6 +28,50 @@ int basu_busctl_entry(int argc, char *argv[]);
 
 #ifdef __ZEPHYR__
 #include "dbus_broker.h"
+#include "busctl_zephyr_stdout.h"
+
+/*
+ * busctl_printf / busctl_puts / busctl_putchar (declared in
+ * busctl_zephyr_stdout.h) route busctl's stdio output to the active shell
+ * session. The macros in that header then redirect every stdout-bound stdio
+ * call in this TU (and in busctl-introspect.c / bus-dump.c) to these helpers.
+ */
+int busctl_vprintf(const char *fmt, va_list ap)
+{
+	if (g_busctl_shell) {
+		shell_vfprintf(g_busctl_shell, SHELL_NORMAL, fmt, ap);
+	} else {
+		(void)vprintf(fmt, ap);
+	}
+}
+
+int busctl_printf(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	busctl_vprintf(fmt, ap);
+	va_end(ap);
+	return 0;
+}
+
+int busctl_puts(const char *s)
+{
+	if (g_busctl_shell) {
+		shell_fprintf(g_busctl_shell, SHELL_NORMAL, "%s\n", s);
+		return 0;
+	}
+	return (puts)(s);
+}
+
+int busctl_putchar(int c)
+{
+	if (g_busctl_shell) {
+		shell_fprintf(g_busctl_shell, SHELL_NORMAL, "%c", c);
+		return c;
+	}
+	return (putchar)(c);
+}
 
 /*
  * Wrapper cleanup: calls disconnect_from_dbroker to properly release
